@@ -14,19 +14,63 @@ app.use(express.static(path.join(__dirname)));
 // Arquivo de dados
 const DATA_FILE = path.join(__dirname, 'data.json');
 
-// Ler dados do arquivo
+// Dados padrão (salas iniciais)
+const DADOS_PADRAO = {
+  salas: [
+    {
+      id: 1,
+      nome: "Partida 10 reais",
+      valor: 10,
+      jogadores: [],
+      limite: 10,
+      aberta: true,
+      moderador: null
+    },
+    {
+      id: 2,
+      nome: "Partida 20 reais",
+      valor: 20,
+      jogadores: [],
+      limite: 10,
+      aberta: true,
+      moderador: null
+    }
+  ],
+  contas: {}
+};
+
+// Ler dados do arquivo (com fallback para padrão)
 function lerDados() {
   try {
+    if (!fs.existsSync(DATA_FILE)) {
+      // Se arquivo não existe, criar com dados padrão
+      fs.writeFileSync(DATA_FILE, JSON.stringify(DADOS_PADRAO, null, 2));
+      return DADOS_PADRAO;
+    }
+    
     const data = fs.readFileSync(DATA_FILE, 'utf8');
-    return JSON.parse(data);
+    const parsed = JSON.parse(data);
+    
+    // Garantir que tem salas (caso arquivo esté corrompido ou vazio)
+    if (!parsed.salas || parsed.salas.length === 0) {
+      parsed.salas = DADOS_PADRAO.salas;
+      salvarDados(parsed);
+    }
+    
+    return parsed;
   } catch (e) {
-    return { salas: [], contas: {} };
+    console.error("Erro ao ler dados:", e);
+    return DADOS_PADRAO;
   }
 }
 
 // Salvar dados no arquivo
 function salvarDados(dados) {
-  fs.writeFileSync(DATA_FILE, JSON.stringify(dados, null, 2));
+  try {
+    fs.writeFileSync(DATA_FILE, JSON.stringify(dados, null, 2));
+  } catch (e) {
+    console.error("Erro ao salvar dados:", e);
+  }
 }
 
 // ========== ENDPOINTS DE SALAS ==========
@@ -150,6 +194,13 @@ app.delete('/api/contas', (req, res) => {
 });
 
 // ========== INICIAR SERVIDOR ==========
+
+// Garantir que dados existem ao iniciar
+lerDados();
+
 app.listen(PORT, () => {
+  const dados = lerDados();
   console.log(`🚀 Servidor rodando em http://localhost:${PORT}`);
+  console.log(`📊 Salas carregadas: ${dados.salas.length}`);
+  console.log(`👥 Contas carregadas: ${Object.keys(dados.contas).length}`);
 });
