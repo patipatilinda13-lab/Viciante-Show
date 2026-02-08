@@ -1,22 +1,26 @@
 <<<<<<< HEAD
-# Pastas do VS Code e Sistema
+# ========== FRONT-END (NÃO SOBE) ==========
+index.html
+script.js
+style.css
+
+# ========== DADOS LOCAIS (NÃO SOBE) ==========
+data.json
+package-lock.json
+
+# ========== LIXO DO VS CODE ==========
 .history/
 .vscode/
 .DS_Store
 
-# Dependências
-node_modules/
-
-# Logs
+# ========== LOGS E TEMPORÁRIOS ==========
 *.log
 npm-debug.log*
-
-# Arquivos de dados locais (não subir para GitHub)
-data.json
-package-lock.json
-
-# Não queremos sobrescrever dados do Render
 *.tmp
+*.temp
+
+# ========== NODE ==========
+node_modules/
 =======
 # Logs
 logs
