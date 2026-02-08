@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 # 🎲 Viciante Show - Sorteio das Maletas
 
 Aplicação web para sorteio de maletas com sistema de autenticação e gerenciamento de salas.
@@ -85,3 +86,7 @@ Abra `http://localhost:3000` no navegador
 - O `data.json` é criado automaticamente na primeira execução
 - Dados são persistidos localmente no servidor
 - Para produção, considere usar um banco de dados real (MongoDB, PostgreSQL)
+=======
+# Viciante-Show
+App Viciante Show
+>>>>>>> 9d6c73d8e3887c4b5f49baa0015277c54890aac2
