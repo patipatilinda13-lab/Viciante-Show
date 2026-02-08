@@ -1146,6 +1146,13 @@ function verificarSessaoPersistida() {
 abaCadastro.onclick = mostrarFormularioCadastro;
 abaLogin.onclick = mostrarFormularioLogin;
 
+btnCadastro.onclick = () => {
+  formularioCadastro.style.display = "block";
+  formularioLogin.style.display = "none";
+  abaCadastro.classList.add("ativo");
+  abaLogin.classList.remove("ativo");
+};
+
 btnCadastrar.onclick = async () => {
   const login = inputCadastroLogin.value.trim();
   const senha = inputCadastroSenha.value;
