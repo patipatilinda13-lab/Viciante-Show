@@ -28,10 +28,10 @@ const CHAVE_CONTAS = "vicianteshow_contas";
 const CHAVE_USUARIO_LOGADO = "vicianteshow_usuario_logado";
 const TIMEOUT_SESSAO = 5 * 60 * 1000; // 5 minutos em ms
 
-// URL do servidor (muda automaticamente entre local e produção)
-const API_URL = window.location.hostname === 'localhost' 
-  ? 'http://localhost:3000'
-  : 'https://viciante-show.onrender.com';
+// URL do servidor - API sempre no Render!
+// Quando testar localmente, descomente a linha com localhost
+const API_URL = 'https://viciante-show.onrender.com';
+// const API_URL = 'http://localhost:3000'; // Descomentar apenas para testes locais
 let adminLogado = false;
 let nomeJogadorAtual = null;
 let idJogadorAtual = null;

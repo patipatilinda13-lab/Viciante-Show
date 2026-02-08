@@ -1,11 +1,22 @@
 <<<<<<< HEAD
-node_modules/
-.env
-.DS_Store
-*.log
-npm-debug.log*
+# Pastas do VS Code e Sistema
 .history/
 .vscode/
+.DS_Store
+
+# Dependências
+node_modules/
+
+# Logs
+*.log
+npm-debug.log*
+
+# Arquivos de dados locais (não subir para GitHub)
+data.json
+package-lock.json
+
+# Não queremos sobrescrever dados do Render
+*.tmp
 =======
 # Logs
 logs
