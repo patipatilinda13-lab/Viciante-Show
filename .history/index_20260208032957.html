@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Sorteio das Maletas</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+
+  <div id="app">
+
+    <div id="tela-salas">
+      <h2>🎲 Salas Disponíveis</h2>
+      <div id="statusAdminTela" style="display:none; text-align: center; padding: 10px; background: #2d5016; border-radius: 5px; margin-bottom: 15px;">
+        <p style="margin: 0; color: #90EE90;"><strong>✅ Logado como ADMIN</strong></p>
+      </div>
+      <div id="lista-salas"></div>
+      <button id="abrirPainelBtn" class="btn-acesso-painel" style="display:none;">📋 Painel</button>
+      <button id="abrirAdminSecreto" class="btn-acesso-painel">🔐 Código de Admin</button>
+      <button id="sairAdminBtn" class="btn-secondary" style="display:none;">🚪 Sair Admin</button>
+    </div>
+
+    <div id="tela-admin-secreto" style="display:none;">
+      <div class="login-container">
+        <h2>🔐 Código de Admin</h2>
+        <p>Digite o código de acesso:</p>
+        <input type="password" id="senhaAdminInput" placeholder="Código de acesso" />
+        <button id="entrarAdminBtn">Entrar</button>
+        <button id="voltarAdminBtn" class="btn-secondary">Voltar</button>
+      </div>
+    </div>
+
+    <div id="tela-painel-moderador-direto" style="display:none;">
+      <div class="painel-container">
+        <button id="sairPainelSecretoBtn" class="btn-voltar">← Sair do Painel</button>
+        <h2>⚙️ Painel Moderador</h2>
+        
+        <div id="containerOpcoesPainelSecreto">
+          <div class="opcao-painel">
+            <h3>➕ Criar Nova Sala</h3>
+            <div class="form-criar-sala">
+              <input type="text" id="inputNomeSalaSecreto" placeholder="Nome da sala (ex: Partida 50 reais)" maxlength="30" />
+              <input type="number" id="inputValorSalaSecreto" placeholder="Valor do ingresso (ex: 50)" min="1" />
+              <button id="btnCriarSalaSecreto">Criar Sala</button>
+            </div>
+          </div>
+
+          <div class="opcao-painel">
+            <h3>📋 Gerenciar Salas</h3>
+            <div id="listaSalasModera" style="max-height: 400px; overflow-y: auto;"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+
+
+    <div id="tela-sala-gerenciamento" style="display:none;">
+      <button id="voltarGerenciamento" class="btn-voltar">← Voltar</button>
+      <h2 id="nomeSalaGerenciamento"></h2>
+
+      <div id="containerParticipantes">
+        <h3>👥 Participantes:</h3>
+        <div id="listaParticipantes"></div>
+      </div>
+
+      <div id="avisoPagamento" class="aviso-info">
+        ✅ Marque quem já pagou para iniciar
+      </div>
+
+      <button id="iniciarSorteio" class="btn-iniciar" disabled>
+        🎰 Iniciar Sorteio
+      </button>
+    </div>
+
+    <div id="tela-jogo" style="display:none;">
+      <h1 class="titulo">🎒 Escolha da Maleta</h1>
+
+      <div id="ordem">
+        <p>Ordem do Sorteio:</p>
+        <ul id="listaOrdem"></ul>
+      </div>
+
+      <div id="maletas">
+        <!-- maletas geradas via JS -->
+      </div>
+
+      <div id="status">
+        Aguardando escolha...
+      </div>
+
+      <button id="abrirBtn" disabled>Abrir Maletas</button>
+
+      <div id="resultado" class="hidden">
+        <h2 id="resultadoTexto"></h2>
+        <div id="botoesResultado">
+          <button id="btnProximaRodada" class="btn-proxima-rodada" onclick="proximaRodada()">🔄 Próxima Rodada</button>
+          <button id="btnVoltar" class="btn-voltar-salas" onclick="resetar()">🏠 Voltar às Salas</button>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <script src="script.js"></script>
+</body>
+</html>
