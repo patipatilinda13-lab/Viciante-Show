@@ -75,7 +75,7 @@ function hashSenha(senha) {
   return "hash_" + Math.abs(hash).toString(36);
 }
 
-async function registrarConta(login, senha) {
+function registrarConta(login, senha) {
   if (login.length < 6) {
     alert("❌ Login deve ter no mínimo 6 caracteres!");
     return false;
@@ -86,72 +86,48 @@ async function registrarConta(login, senha) {
     return false;
   }
 
-  try {
-    const response = await fetch(`${API_URL}/api/contas/registrar`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ login, senha })
-    });
-
-    const resultado = await response.json();
-
-    if (!response.ok) {
-      alert(`❌ ${resultado.erro}`);
-      return false;
-    }
-
-    // Logar automaticamente após registrar
-    usuarioLogadoAtual = resultado.login;
-    idJogadorAtual = resultado.id;
-    ultimaAtividadeTimestamp = Date.now();
-    
-    localStorage.setItem(CHAVE_USUARIO_LOGADO, JSON.stringify({
-      login: resultado.login,
-      id: resultado.id,
-      timestamp: ultimaAtividadeTimestamp
-    }));
-
-    alert("✅ Conta criada com sucesso!");
-    return true;
-  } catch (e) {
-    console.error("Erro ao registrar:", e);
-    alert("❌ Erro ao registrar conta");
+  const contas = obterContas();
+  
+  if (contas[login]) {
+    alert("❌ Esse login já está registrado!");
     return false;
   }
+
+  // Criar nova conta
+  contas[login] = {
+    id: "user_" + Math.random().toString(36).substr(2, 9),
+    login: login,
+    senha: hashSenha(senha),
+    senhaPlana: senha, // Guardar a senha de verdade para mostrar ao admin
+    dataCriacao: new Date().toISOString(),
+    torneios: [] // Histórico de participação
+  };
+
+  salvarContas(contas);
+  return true;
 }
 
-async function logarConta(login, senha) {
-  try {
-    const response = await fetch(`${API_URL}/api/contas/login`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ login, senha })
-    });
+function logarConta(login, senha) {
+  const contas = obterContas();
+  const conta = contas[login];
 
-    const resultado = await response.json();
-
-    if (!response.ok) {
-      alert(`❌ ${resultado.erro}`);
-      return false;
-    }
-
-    // Logar com sucesso
-    usuarioLogadoAtual = resultado.login;
-    idJogadorAtual = resultado.id;
-    ultimaAtividadeTimestamp = Date.now();
-    
-    localStorage.setItem(CHAVE_USUARIO_LOGADO, JSON.stringify({
-      login: resultado.login,
-      id: resultado.id,
-      timestamp: ultimaAtividadeTimestamp
-    }));
-
-    return true;
-  } catch (e) {
-    console.error("Erro ao logar:", e);
-    alert("❌ Erro ao fazer login");
+  if (!conta || conta.senha !== hashSenha(senha)) {
+    alert("❌ Login ou senha incorretos!");
     return false;
   }
+
+  // Logar com sucesso
+  usuarioLogadoAtual = login;
+  idJogadorAtual = conta.id;
+  ultimaAtividadeTimestamp = Date.now();
+  
+  localStorage.setItem(CHAVE_USUARIO_LOGADO, JSON.stringify({
+    login: login,
+    id: conta.id,
+    timestamp: ultimaAtividadeTimestamp
+  }));
+
+  return true;
 }
 
 function verificarTimeoutSessao() {
@@ -1146,35 +1122,39 @@ function verificarSessaoPersistida() {
 abaCadastro.onclick = mostrarFormularioCadastro;
 abaLogin.onclick = mostrarFormularioLogin;
 
-btnCadastro.onclick = () => {
-  formularioCadastro.style.display = "block";
-  formularioLogin.style.display = "none";
-  abaCadastro.classList.add("ativo");
-  abaLogin.classList.remove("ativo");
-};
-
-btnCadastrar.onclick = async () => {
+btnCadastrar.onclick = () => {
   const login = inputCadastroLogin.value.trim();
   const senha = inputCadastroSenha.value;
   
-  if (await registrarConta(login, senha)) {
+  if (registrarConta(login, senha)) {
+    alert(`✅ Conta "${login}" criada com sucesso!`);
     inputCadastroLogin.value = "";
     inputCadastroSenha.value = "";
+    
+    // Fazer login automaticamente
+    usuarioLogadoAtual = login;
+    const contas = obterContas();
+    idJogadorAtual = contas[login].id;
+    ultimaAtividadeTimestamp = Date.now();
+    localStorage.setItem(CHAVE_USUARIO_LOGADO, JSON.stringify({
+      login: login,
+      id: contas[login].id,
+      timestamp: ultimaAtividadeTimestamp
+    }));
     
     // Ir para tela de salas
     telaAutenticacao.style.display = "none";
     telaSalas.style.display = "block";
     atualizarStatusAdmin();
-    await carregarSalas();
     renderizarSalas();
   }
 };
 
-btnLogar.onclick = async () => {
+btnLogar.onclick = () => {
   const login = inputLoginUsername.value.trim();
   const senha = inputLoginSenha.value;
   
-  if (await logarConta(login, senha)) {
+  if (logarConta(login, senha)) {
     inputLoginUsername.value = "";
     inputLoginSenha.value = "";
     
@@ -1182,7 +1162,6 @@ btnLogar.onclick = async () => {
     telaAutenticacao.style.display = "none";
     telaSalas.style.display = "block";
     atualizarStatusAdmin();
-    await carregarSalas();
     renderizarSalas();
   }
 };

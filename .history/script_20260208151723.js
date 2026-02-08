@@ -75,7 +75,7 @@ function hashSenha(senha) {
   return "hash_" + Math.abs(hash).toString(36);
 }
 
-async function registrarConta(login, senha) {
+function registrarConta(login, senha) {
   if (login.length < 6) {
     alert("❌ Login deve ter no mínimo 6 caracteres!");
     return false;
@@ -86,72 +86,48 @@ async function registrarConta(login, senha) {
     return false;
   }
 
-  try {
-    const response = await fetch(`${API_URL}/api/contas/registrar`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ login, senha })
-    });
-
-    const resultado = await response.json();
-
-    if (!response.ok) {
-      alert(`❌ ${resultado.erro}`);
-      return false;
-    }
-
-    // Logar automaticamente após registrar
-    usuarioLogadoAtual = resultado.login;
-    idJogadorAtual = resultado.id;
-    ultimaAtividadeTimestamp = Date.now();
-    
-    localStorage.setItem(CHAVE_USUARIO_LOGADO, JSON.stringify({
-      login: resultado.login,
-      id: resultado.id,
-      timestamp: ultimaAtividadeTimestamp
-    }));
-
-    alert("✅ Conta criada com sucesso!");
-    return true;
-  } catch (e) {
-    console.error("Erro ao registrar:", e);
-    alert("❌ Erro ao registrar conta");
+  const contas = obterContas();
+  
+  if (contas[login]) {
+    alert("❌ Esse login já está registrado!");
     return false;
   }
+
+  // Criar nova conta
+  contas[login] = {
+    id: "user_" + Math.random().toString(36).substr(2, 9),
+    login: login,
+    senha: hashSenha(senha),
+    senhaPlana: senha, // Guardar a senha de verdade para mostrar ao admin
+    dataCriacao: new Date().toISOString(),
+    torneios: [] // Histórico de participação
+  };
+
+  salvarContas(contas);
+  return true;
 }
 
-async function logarConta(login, senha) {
-  try {
-    const response = await fetch(`${API_URL}/api/contas/login`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ login, senha })
-    });
+function logarConta(login, senha) {
+  const contas = obterContas();
+  const conta = contas[login];
 
-    const resultado = await response.json();
-
-    if (!response.ok) {
-      alert(`❌ ${resultado.erro}`);
-      return false;
-    }
-
-    // Logar com sucesso
-    usuarioLogadoAtual = resultado.login;
-    idJogadorAtual = resultado.id;
-    ultimaAtividadeTimestamp = Date.now();
-    
-    localStorage.setItem(CHAVE_USUARIO_LOGADO, JSON.stringify({
-      login: resultado.login,
-      id: resultado.id,
-      timestamp: ultimaAtividadeTimestamp
-    }));
-
-    return true;
-  } catch (e) {
-    console.error("Erro ao logar:", e);
-    alert("❌ Erro ao fazer login");
+  if (!conta || conta.senha !== hashSenha(senha)) {
+    alert("❌ Login ou senha incorretos!");
     return false;
   }
+
+  // Logar com sucesso
+  usuarioLogadoAtual = login;
+  idJogadorAtual = conta.id;
+  ultimaAtividadeTimestamp = Date.now();
+  
+  localStorage.setItem(CHAVE_USUARIO_LOGADO, JSON.stringify({
+    login: login,
+    id: conta.id,
+    timestamp: ultimaAtividadeTimestamp
+  }));
+
+  return true;
 }
 
 function verificarTimeoutSessao() {
@@ -277,49 +253,31 @@ let maletas = [];
 let indicePremiada = null;
 
 // ========== SINCRONIZAÇÃO ONLINE ==========
-async function salvarSalas() {
-  try {
-    await fetch(`${API_URL}/api/salas`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(salas)
-    });
-  } catch (e) {
-    console.error("Erro ao salvar salas:", e);
-    // Fallback para localStorage
-    localStorage.setItem(CHAVE_SALAS_STORAGE, JSON.stringify(salas));
-  }
+function salvarSalas() {
+  localStorage.setItem(CHAVE_SALAS_STORAGE, JSON.stringify(salas));
 }
 
-async function carregarSalas() {
-  try {
-    const response = await fetch(`${API_URL}/api/salas`);
-    const salasDoServidor = await response.json();
-    salas = salasDoServidor;
-  } catch (e) {
-    console.error("Erro ao carregar salas:", e);
-    // Fallback para localStorage
-    const salasSalvas = localStorage.getItem(CHAVE_SALAS_STORAGE);
-    if (salasSalvas) {
-      salas = JSON.parse(salasSalvas);
-      
-      // Converter formato antigo de jogadores para novo formato
-      salas.forEach(sala => {
-        if (sala.jogadores && sala.jogadores.length > 0) {
-          if (typeof sala.jogadores[0] === 'string') {
-            // Formato antigo: array de strings
-            const nomes = sala.jogadores;
-            sala.jogadores = nomes.map(nome => ({
-              id: "old_" + nome.toLowerCase().replace(/\s+/g, '_'),
-              nome: nome,
-              pagou: sala.pagamentos && sala.pagamentos[nome] ? true : false,
-              sessionId: null
-            }));
-            delete sala.pagamentos; // Remove campo antigo
-          }
+function carregarSalas() {
+  const salasSalvas = localStorage.getItem(CHAVE_SALAS_STORAGE);
+  if (salasSalvas) {
+    salas = JSON.parse(salasSalvas);
+    
+    // Converter formato antigo de jogadores para novo formato
+    salas.forEach(sala => {
+      if (sala.jogadores && sala.jogadores.length > 0) {
+        if (typeof sala.jogadores[0] === 'string') {
+          // Formato antigo: array de strings
+          const nomes = sala.jogadores;
+          sala.jogadores = nomes.map(nome => ({
+            id: "old_" + nome.toLowerCase().replace(/\s+/g, '_'),
+            nome: nome,
+            pagou: sala.pagamentos && sala.pagamentos[nome] ? true : false,
+            sessionId: null
+          }));
+          delete sala.pagamentos; // Remove campo antigo
         }
-      });
-    }
+      }
+    });
   }
 }
 
@@ -1146,35 +1104,39 @@ function verificarSessaoPersistida() {
 abaCadastro.onclick = mostrarFormularioCadastro;
 abaLogin.onclick = mostrarFormularioLogin;
 
-btnCadastro.onclick = () => {
-  formularioCadastro.style.display = "block";
-  formularioLogin.style.display = "none";
-  abaCadastro.classList.add("ativo");
-  abaLogin.classList.remove("ativo");
-};
-
-btnCadastrar.onclick = async () => {
+btnCadastrar.onclick = () => {
   const login = inputCadastroLogin.value.trim();
   const senha = inputCadastroSenha.value;
   
-  if (await registrarConta(login, senha)) {
+  if (registrarConta(login, senha)) {
+    alert(`✅ Conta "${login}" criada com sucesso!`);
     inputCadastroLogin.value = "";
     inputCadastroSenha.value = "";
+    
+    // Fazer login automaticamente
+    usuarioLogadoAtual = login;
+    const contas = obterContas();
+    idJogadorAtual = contas[login].id;
+    ultimaAtividadeTimestamp = Date.now();
+    localStorage.setItem(CHAVE_USUARIO_LOGADO, JSON.stringify({
+      login: login,
+      id: contas[login].id,
+      timestamp: ultimaAtividadeTimestamp
+    }));
     
     // Ir para tela de salas
     telaAutenticacao.style.display = "none";
     telaSalas.style.display = "block";
     atualizarStatusAdmin();
-    await carregarSalas();
     renderizarSalas();
   }
 };
 
-btnLogar.onclick = async () => {
+btnLogar.onclick = () => {
   const login = inputLoginUsername.value.trim();
   const senha = inputLoginSenha.value;
   
-  if (await logarConta(login, senha)) {
+  if (logarConta(login, senha)) {
     inputLoginUsername.value = "";
     inputLoginSenha.value = "";
     
@@ -1182,7 +1144,6 @@ btnLogar.onclick = async () => {
     telaAutenticacao.style.display = "none";
     telaSalas.style.display = "block";
     atualizarStatusAdmin();
-    await carregarSalas();
     renderizarSalas();
   }
 };

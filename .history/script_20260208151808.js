@@ -1174,7 +1174,7 @@ btnLogar.onclick = async () => {
   const login = inputLoginUsername.value.trim();
   const senha = inputLoginSenha.value;
   
-  if (await logarConta(login, senha)) {
+  if (logarConta(login, senha)) {
     inputLoginUsername.value = "";
     inputLoginSenha.value = "";
     
@@ -1182,7 +1182,6 @@ btnLogar.onclick = async () => {
     telaAutenticacao.style.display = "none";
     telaSalas.style.display = "block";
     atualizarStatusAdmin();
-    await carregarSalas();
     renderizarSalas();
   }
 };

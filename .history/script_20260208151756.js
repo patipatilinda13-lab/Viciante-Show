@@ -1146,35 +1146,39 @@ function verificarSessaoPersistida() {
 abaCadastro.onclick = mostrarFormularioCadastro;
 abaLogin.onclick = mostrarFormularioLogin;
 
-btnCadastro.onclick = () => {
-  formularioCadastro.style.display = "block";
-  formularioLogin.style.display = "none";
-  abaCadastro.classList.add("ativo");
-  abaLogin.classList.remove("ativo");
-};
-
-btnCadastrar.onclick = async () => {
+btnCadastrar.onclick = () => {
   const login = inputCadastroLogin.value.trim();
   const senha = inputCadastroSenha.value;
   
-  if (await registrarConta(login, senha)) {
+  if (registrarConta(login, senha)) {
+    alert(`✅ Conta "${login}" criada com sucesso!`);
     inputCadastroLogin.value = "";
     inputCadastroSenha.value = "";
+    
+    // Fazer login automaticamente
+    usuarioLogadoAtual = login;
+    const contas = obterContas();
+    idJogadorAtual = contas[login].id;
+    ultimaAtividadeTimestamp = Date.now();
+    localStorage.setItem(CHAVE_USUARIO_LOGADO, JSON.stringify({
+      login: login,
+      id: contas[login].id,
+      timestamp: ultimaAtividadeTimestamp
+    }));
     
     // Ir para tela de salas
     telaAutenticacao.style.display = "none";
     telaSalas.style.display = "block";
     atualizarStatusAdmin();
-    await carregarSalas();
     renderizarSalas();
   }
 };
 
-btnLogar.onclick = async () => {
+btnLogar.onclick = () => {
   const login = inputLoginUsername.value.trim();
   const senha = inputLoginSenha.value;
   
-  if (await logarConta(login, senha)) {
+  if (logarConta(login, senha)) {
     inputLoginUsername.value = "";
     inputLoginSenha.value = "";
     
@@ -1182,7 +1186,6 @@ btnLogar.onclick = async () => {
     telaAutenticacao.style.display = "none";
     telaSalas.style.display = "block";
     atualizarStatusAdmin();
-    await carregarSalas();
     renderizarSalas();
   }
 };
