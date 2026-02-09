@@ -215,7 +215,213 @@ app.delete('/api/contas/:login', (req, res) => {
   res.json({ sucesso: true, mensagem: `Conta "${login}" foi deletada` });
 });
 
-// ========== INICIAR SERVIDOR ==========
+// ========== ENDPOINTS DE SORTEIO (SINCRONIZAÇÃO) ==========
+
+// GET /api/salas/:id - Retorna uma sala específica (com estado do sorteio)
+app.get('/api/salas/:id', (req, res) => {
+  const dados = lerDados();
+  const sala = dados.salas.find(s => s.id === parseInt(req.params.id));
+  
+  if (!sala) {
+    return res.status(404).json({ erro: 'Sala não encontrada' });
+  }
+  
+  res.json(sala);
+});
+
+// PUT /api/salas/:id/sorteio - Inicia sorteio e cria maletas
+app.put('/api/salas/:id/sorteio', (req, res) => {
+  const dados = lerDados();
+  const sala = dados.salas.find(s => s.id === parseInt(req.params.id));
+  
+  if (!sala) {
+    return res.status(404).json({ erro: 'Sala não encontrada' });
+  }
+  
+  const { ordem, totalMaletas } = req.body;
+  
+  if (!ordem || ordem.length < 2) {
+    return res.status(400).json({ erro: 'Precisa de pelo menos 2 jogadores' });
+  }
+  
+  // Inicializar estado do sorteio
+  const indicePremiada = Math.floor(Math.random() * totalMaletas);
+  
+  sala.sorteioAtivo = true;
+  sala.ordem = ordem;
+  sala.turnoAtual = 0;
+  sala.maletas = Array(totalMaletas).fill(null).map((_, i) => ({
+    numero: i + 1,
+    dono: null,
+    premio: i === indicePremiada
+  }));
+  
+  salvarDados(dados);
+  res.json({ sucesso: true, sala });
+});
+
+// POST /api/salas/:id/maleta - Registra abertura de maleta
+app.post('/api/salas/:id/maleta', (req, res) => {
+  const dados = lerDados();
+  const sala = dados.salas.find(s => s.id === parseInt(req.params.id));
+  
+  if (!sala || !sala.sorteioAtivo) {
+    return res.status(400).json({ erro: 'Sorteio não está ativo' });
+  }
+  
+  const { numeroMaleta, jogador } = req.body;
+  
+  if (!numeroMaleta || numeroMaleta < 1 || numeroMaleta > sala.maletas.length) {
+    return res.status(400).json({ erro: 'Número de maleta inválido' });
+  }
+  
+  if (sala.turnoAtual >= sala.ordem.length) {
+    return res.status(400).json({ erro: 'Sorteio já terminou' });
+  }
+  
+  // VALIDAÇÃO RIGOROSA DE TURNO: Verificar que quem está clicando é o jogador correto
+  const jogadorDaVez = sala.ordem[sala.turnoAtual];
+  
+  if (jogador !== jogadorDaVez) {
+    return res.status(403).json({ erro: `Não é sua vez! Aguarde ${jogadorDaVez}` });
+  }
+  
+  const maleta = sala.maletas[numeroMaleta - 1];
+  
+  if (maleta.dono !== null) {
+    return res.status(400).json({ erro: 'Maleta já foi escolhida' });
+  }
+  
+  // Atualizar maleta (inclusão e incremento são práximos, minimizando race condition)
+  maleta.dono = jogadorDaVez;
+  sala.turnoAtual++;
+  
+  salvarDados(dados);
+  res.json({ sucesso: true, sala });
+});
+
+// PUT /api/salas/:id/sorteio/terminar - Termina sorteio
+app.put('/api/salas/:id/sorteio/terminar', (req, res) => {
+  const dados = lerDados();
+  const sala = dados.salas.find(s => s.id === parseInt(req.params.id));
+  
+  if (!sala) {
+    return res.status(404).json({ erro: 'Sala não encontrada' });
+  }
+  
+  sala.sorteioAtivo = false;
+  sala.maletas = [];
+  sala.ordem = [];
+  sala.turnoAtual = 0;
+  sala.revelado = false;
+  sala.vencedor = null;
+  
+  salvarDados(dados);
+  res.json({ sucesso: true });
+});
+
+// PUT /api/salas/:id/sorteio/revelar - Revela resultado das maletas
+app.put('/api/salas/:id/sorteio/revelar', (req, res) => {
+  const dados = lerDados();
+  const sala = dados.salas.find(s => s.id === parseInt(req.params.id));
+  
+  if (!sala || !sala.sorteioAtivo) {
+    return res.status(400).json({ erro: 'Sorteio não está ativo' });
+  }
+  
+  // Encontrar vencedor
+  const maletaPremio = sala.maletas.find(m => m.premio && m.dono);
+  const vencedor = maletaPremio ? maletaPremio.dono : null;
+  
+  sala.revelado = true;
+  sala.vencedor = vencedor;
+  
+  salvarDados(dados);
+  res.json({ sucesso: true, vencedor, sala });
+});
+
+// PUT /api/salas/:id/sorteio/vencedor - Registra resultado e próxima rodada
+app.put('/api/salas/:id/sorteio/vencedor', (req, res) => {
+  const dados = lerDados();
+  const sala = dados.salas.find(s => s.id === parseInt(req.params.id));
+  
+  if (!sala) {
+    return res.status(404).json({ erro: 'Sala não encontrada' });
+  }
+  
+  const { vencedor } = req.body;
+  
+  // Registrar resultado de torneio - aqui você poderia salvar no histórico
+  // Por enquanto apenas marca como registrado
+  sala.vencedorRegistrado = vencedor;
+  
+  salvarDados(dados);
+  res.json({ sucesso: true });
+});
+
+// PUT /api/salas/:id/sorteio/proxima - Reinicia sorteio para próxima rodada
+app.put('/api/salas/:id/sorteio/proxima', (req, res) => {
+  const dados = lerDados();
+  const sala = dados.salas.find(s => s.id === parseInt(req.params.id));
+  
+  if (!sala) {
+    return res.status(404).json({ erro: 'Sala não encontrada' });
+  }
+  
+  const { ordem, totalMaletas } = req.body;
+  
+  if (!ordem || ordem.length < 2) {
+    return res.status(400).json({ erro: 'Precisa de pelo menos 2 jogadores' });
+  }
+  
+  // Resetar e criar novo sorteio
+  const indicePremiada = Math.floor(Math.random() * totalMaletas);
+  
+  sala.sorteioAtivo = true;
+  sala.ordem = ordem;
+  sala.turnoAtual = 0;
+  sala.revelado = false;
+  sala.vencedor = null;
+  sala.vencedorRegistrado = null;
+  sala.maletas = Array(totalMaletas).fill(null).map((_, i) => ({
+    numero: i + 1,
+    dono: null,
+    premio: i === indicePremiada
+  }));
+  
+  salvarDados(dados);
+  res.json({ sucesso: true, sala });
+});
+
+// PUT /api/salas/:id/sorteio/limpar - Cleanup: expulsa todos e limpa sorteio
+app.put('/api/salas/:id/sorteio/limpar', (req, res) => {
+  const dados = lerDados();
+  const sala = dados.salas.find(s => s.id === parseInt(req.params.id));
+  
+  if (!sala) {
+    return res.status(404).json({ erro: 'Sala não encontrada' });
+  }
+  
+  // Expulsa todos os jogadores
+  sala.jogadores = [];
+  
+  // Limpa dados do sorteio
+  sala.sorteioAtivo = false;
+  sala.maletas = [];
+  sala.ordem = [];
+  sala.turnoAtual = 0;
+  sala.revelado = false;
+  sala.vencedor = null;
+  sala.vencedorRegistrado = null;
+  
+  // Mantem sala aberta mas vazia
+  sala.aberta = true;
+  
+  salvarDados(dados);
+  res.json({ sucesso: true, sala });
+});
+
+// ========== INICIAR SERVIDOR ===========
 
 // Garantir que dados existem ao iniciar
 lerDados();
