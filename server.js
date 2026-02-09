@@ -194,6 +194,27 @@ app.delete('/api/contas', (req, res) => {
   res.json({ sucesso: true });
 });
 
+// DELETE /api/contas/:login - Deleta uma conta específica (admin)
+app.delete('/api/contas/:login', (req, res) => {
+  const senha = req.query.senha;
+  const login = req.params.login;
+  
+  if (senha !== '@@Lucas2014@@') {
+    return res.status(403).json({ erro: 'Não autorizado' });
+  }
+  
+  const dados = lerDados();
+  
+  if (!dados.contas[login]) {
+    return res.status(404).json({ erro: 'Conta não encontrada' });
+  }
+  
+  delete dados.contas[login];
+  salvarDados(dados);
+  
+  res.json({ sucesso: true, mensagem: `Conta "${login}" foi deletada` });
+});
+
 // ========== INICIAR SERVIDOR ==========
 
 // Garantir que dados existem ao iniciar
