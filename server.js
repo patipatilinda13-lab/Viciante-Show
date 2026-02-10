@@ -517,6 +517,17 @@ io.on('connection', (socket) => {
     });
   });
   
+  // Pagamento atualizado - GLOBAL (todos recebem para sincronizar status)
+  socket.on('jogador:pagamento-atualizado', (dados) => {
+    io.emit('jogador:pagamento-atualizado', {
+      salaId: dados.salaId,
+      jogadorId: dados.jogadorId,
+      jogadorNome: dados.jogadorNome,
+      pagou: dados.pagou,
+      timestamp: Date.now()
+    });
+  });
+  
   // Desconexão
   socket.on('disconnect', () => {
     console.log(`🔴 Cliente desconectado: ${socket.id}`)
