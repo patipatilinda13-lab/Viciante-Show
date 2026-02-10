@@ -1,0 +1,9 @@
+ao se logar fica c nao faz sentido, o certo é logar se o jogador
+tiver conta
+ou mostrar conta nao existe caso nao tiver conta.
+
+Fiz teste logando com uma conta que nao existe, e tbm deu Reconectando..
+
+Eu deletei umas contas, e os jogadores que estavam online permaneceram online
+o correto seria eles tomarem Disconect. voltando para a tela inicial para se registrar
+

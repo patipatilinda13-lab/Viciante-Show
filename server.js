@@ -2,8 +2,17 @@ const express = require('express');
 const cors = require('cors');
 const fs = require('fs');
 const path = require('path');
+const http = require('http');
+const socketIo = require('socket.io');
 
 const app = express();
+const servidor = http.createServer(app);
+const io = socketIo(servidor, {
+  cors: {
+    origin: "*",
+    methods: ["GET", "POST"]
+  }
+});
 const PORT = process.env.PORT || 3000;
 
 // Middleware
@@ -426,9 +435,89 @@ app.put('/api/salas/:id/sorteio/limpar', (req, res) => {
 // Garantir que dados existem ao iniciar
 lerDados();
 
-app.listen(PORT, () => {
+// Mapa para rastrear salas e conexões
+const salasConectadas = new Map(); // salaId -> Set de socketIds
+
+// Event handlers do Socket.io
+io.on('connection', (socket) => {
+  console.log(`🟢 Cliente conectado: ${socket.id}`);
+  
+  // Jogador entra em uma sala
+  socket.on('sala:entrar', (dados) => {
+    const { salaId, jogadorId, jogadorNome } = dados;
+    
+    // Inscrever socket em uma "room" do socket.io
+    socket.join(`sala_${salaId}`);
+    
+    // Registrar que esse jogador está nessa sala
+    if (!salasConectadas.has(salaId)) {
+      salasConectadas.set(salaId, new Set());
+    }
+    salasConectadas.get(salaId).add(socket.id);
+    
+    // Notificar outros na sala que alguém entrou
+    io.to(`sala_${salaId}`).emit('sala:jogador-entrou', {
+      jogadorId,
+      jogadorNome,
+      timestamp: Date.now()
+    });
+  });
+  
+  // Maleta foi aberta
+  socket.on('maleta:aberta', (dados) => {
+    const { salaId, numeroMaleta, jogadorDaVez } = dados;
+    
+    // Emitir para TODOS na sala
+    io.to(`sala_${salaId}`).emit('maleta:aberta', {
+      numeroMaleta,
+      jogadorDaVez,
+      timestamp: Date.now()
+    });
+  });
+  
+  // Resultado foi revelado
+  socket.on('sorteio:revelado', (dados) => {
+    const { salaId, vencedor, maletas } = dados;
+    
+    io.to(`sala_${salaId}`).emit('sorteio:revelado', {
+      vencedor,
+      maletas,
+      timestamp: Date.now()
+    });
+  });
+  
+  // Proxima rodada iniciada
+  socket.on('sorteio:proxima', (dados) => {
+    const { salaId, ordem, maletas } = dados;
+    
+    io.to(`sala_${salaId}`).emit('sorteio:proxima', {
+      ordem,
+      maletas,
+      timestamp: Date.now()
+    });
+  });
+  
+  // Desconexão
+  socket.on('disconnect', () => {
+    console.log(`🔴 Cliente desconectado: ${socket.id}`)
+    
+    // Remover de todas as salas
+    salasConectadas.forEach((sockets, salaId) => {
+      if (sockets.has(socket.id)) {
+        sockets.delete(socket.id);
+        io.to(`sala_${salaId}`).emit('sala:jogador-saiu', {
+          socketId: socket.id,
+          timestamp: Date.now()
+        });
+      }
+    });
+  });
+});
+
+servidor.listen(PORT, () => {
   const dados = lerDados();
   console.log(`🚀 Servidor rodando em http://localhost:${PORT}`);
   console.log(`📊 Salas carregadas: ${dados.salas.length}`);
   console.log(`👥 Contas carregadas: ${Object.keys(dados.contas).length}`);
+  console.log(`🔌 WebSocket Socket.io ativo`);
 });
