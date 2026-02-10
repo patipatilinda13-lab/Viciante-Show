@@ -497,6 +497,26 @@ io.on('connection', (socket) => {
     });
   });
   
+  // Participante adicionado
+  socket.on('participante:adicionado', (dados) => {
+    io.to(`sala_${dados.salaId}`).emit('participante:adicionado', {
+      salaId: dados.salaId,
+      jogadorId: dados.jogadorId,
+      jogadorNome: dados.jogadorNome,
+      timestamp: Date.now()
+    });
+  });
+  
+  // Participante removido
+  socket.on('participante:removido', (dados) => {
+    io.to(`sala_${dados.salaId}`).emit('participante:removido', {
+      salaId: dados.salaId,
+      jogadorId: dados.jogadorId,
+      jogadorNome: dados.jogadorNome,
+      timestamp: Date.now()
+    });
+  });
+  
   // Desconexão
   socket.on('disconnect', () => {
     console.log(`🔴 Cliente desconectado: ${socket.id}`)
