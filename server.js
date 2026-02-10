@@ -528,6 +528,16 @@ io.on('connection', (socket) => {
     });
   });
   
+  // Jogador expulso - GLOBAL (todos recebem para sincronizar remoção)
+  socket.on('jogador:expulso', (dados) => {
+    io.emit('jogador:expulso', {
+      salaId: dados.salaId,
+      jogadorId: dados.jogadorId,
+      jogadorNome: dados.jogadorNome,
+      timestamp: Date.now()
+    });
+  });
+  
   // Desconexão
   socket.on('disconnect', () => {
     console.log(`🔴 Cliente desconectado: ${socket.id}`)
