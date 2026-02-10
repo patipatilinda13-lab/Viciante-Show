@@ -497,9 +497,9 @@ io.on('connection', (socket) => {
     });
   });
   
-  // Participante adicionado
+  // Participante adicionado - GLOBAL (todos recebem, mesmo no lobby)
   socket.on('participante:adicionado', (dados) => {
-    io.to(`sala_${dados.salaId}`).emit('participante:adicionado', {
+    io.emit('participante:adicionado', {
       salaId: dados.salaId,
       jogadorId: dados.jogadorId,
       jogadorNome: dados.jogadorNome,
@@ -507,9 +507,9 @@ io.on('connection', (socket) => {
     });
   });
   
-  // Participante removido
+  // Participante removido - GLOBAL (todos recebem, mesmo no lobby)
   socket.on('participante:removido', (dados) => {
-    io.to(`sala_${dados.salaId}`).emit('participante:removido', {
+    io.emit('participante:removido', {
       salaId: dados.salaId,
       jogadorId: dados.jogadorId,
       jogadorNome: dados.jogadorNome,
