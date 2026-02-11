@@ -467,12 +467,15 @@ io.on('connection', (socket) => {
   socket.on('maleta:aberta', (dados) => {
     const { salaId, numeroMaleta, jogadorDaVez } = dados;
     
-    // Emitir para TODOS na sala
-    io.to(`sala_${salaId}`).emit('maleta:aberta', {
+    // GLOBAL broadcast - todos recebem para sincronizar em tempo real
+    io.emit('maleta:aberta', {
+      salaId: salaId,
       numeroMaleta,
       jogadorDaVez,
       timestamp: Date.now()
     });
+    
+    console.log(`📡 Maleta ${numeroMaleta} aberta por ${jogadorDaVez} na sala ${salaId}`);
   });
   
   // Resultado foi revelado
