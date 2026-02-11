@@ -260,11 +260,11 @@ app.put('/api/perfil/:login', (req, res) => {
   
   const { foto, pensamentoDoDia } = req.body;
   
-  // ✅ Validar foto (deve ser f1-f13)
+  // ✅ Validar foto (deve ser f1-f15)
   if (foto) {
-    const fotoValida = /^f(1[0-3]|[1-9])$/.test(foto);
+    const fotoValida = /^f(1[0-5]|[1-9])$/.test(foto);
     if (!fotoValida) {
-      return res.status(400).json({ erro: 'Foto inválida (deve ser f1 a f13)' });
+      return res.status(400).json({ erro: 'Foto inválida (deve ser f1 a f15)' });
     }
     conta.foto = foto;
   }
