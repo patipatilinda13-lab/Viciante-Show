@@ -536,6 +536,14 @@ io.on('connection', (socket) => {
       jogadorNome: dados.jogadorNome,
       timestamp: Date.now()
     });
+    
+    // TAMBÉM emitir participante:removido para sincronizar outros participantes
+    io.emit('participante:removido', {
+      salaId: dados.salaId,
+      jogadorId: dados.jogadorId,
+      jogadorNome: dados.jogadorNome,
+      timestamp: Date.now()
+    });
   });
   
   // Sorteio iniciado - GLOBAL (todos vão para tela de jogo)
