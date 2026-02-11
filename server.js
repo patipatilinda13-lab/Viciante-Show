@@ -253,12 +253,18 @@ app.put('/api/salas/:id/sorteio', (req, res) => {
     return res.status(400).json({ erro: 'Precisa de pelo menos 2 jogadores' });
   }
   
+  // ✅ RESETAR TUDO DO SORTEIO ANTERIOR
+  sala.sorteioAtivo = true;
+  sala.descuento = true;
+  sala.ordem = ordem;
+  sala.turnoAtual = 0;
+  sala.revelado = false;
+  sala.vencedor = null;
+  sala.vencedorRegistrado = null;
+  
   // Inicializar estado do sorteio
   const indicePremiada = Math.floor(Math.random() * totalMaletas);
   
-  sala.sorteioAtivo = true;
-  sala.ordem = ordem;
-  sala.turnoAtual = 0;
   sala.maletas = Array(totalMaletas).fill(null).map((_, i) => ({
     numero: i + 1,
     dono: null,
@@ -266,6 +272,7 @@ app.put('/api/salas/:id/sorteio', (req, res) => {
   }));
   
   salvarDados(dados);
+  console.log(`✅ [Sala ${sala.id}] Novo sorteio iniciado - Ordem: ${ordem.join(' → ')}`);
   res.json({ sucesso: true, sala });
 });
 
