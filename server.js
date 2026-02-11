@@ -663,7 +663,41 @@ io.on('connection', (socket) => {
       }
     });
   });
+
+  // ✅ NOVO: Chat - Receber e rebroadcast mensagens
+  socket.on('chat:enviar', (dados) => {
+    const { usuario, mensagem, tipo, salaId } = dados;
+    
+    console.log(`💬 Chat ${tipo} de ${usuario}: ${mensagem}`);
+    
+    // Validar mensagem
+    if (!mensagem || !usuario || !tipo) {
+      console.error('❌ Dados de chat inválidos');
+      return;
+    }
+    
+    // Rebroadcast para todos os clientes
+    if (tipo === 'global') {
+      // Chat global vai para TODOS
+      io.emit('chat:mensagem', {
+        usuario: usuario,
+        mensagem: mensagem,
+        tipo: 'global',
+        timestamp: Date.now()
+      });
+    } else if (tipo === 'torneio' && salaId) {
+      // Chat de torneio vai apenas para sala
+      io.to(`sala_${salaId}`).emit('chat:mensagem', {
+        usuario: usuario,
+        mensagem: mensagem,
+        tipo: 'torneio',
+        salaId: salaId,
+        timestamp: Date.now()
+      });
+    }
+  });
 });
+
 
 servidor.listen(PORT, () => {
   const dados = lerDados();
