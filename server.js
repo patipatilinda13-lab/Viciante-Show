@@ -538,6 +538,15 @@ io.on('connection', (socket) => {
     });
   });
   
+  // Sorteio iniciado - GLOBAL (todos vão para tela de jogo)
+  socket.on('sorteio:iniciado', (dados) => {
+    io.emit('sorteio:iniciado', {
+      salaId: dados.salaId,
+      ordem: dados.ordem,
+      timestamp: Date.now()
+    });
+  });
+  
   // Desconexão
   socket.on('disconnect', () => {
     console.log(`🔴 Cliente desconectado: ${socket.id}`)
