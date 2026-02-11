@@ -558,6 +558,15 @@ io.on('connection', (socket) => {
     });
   });
   
+  // Countdown de abertura de maletas
+  socket.on('maletas:comecareCountdown', (dados) => {
+    io.emit('maletas:comecareCountdown', {
+      salaId: dados.salaId,
+      timestamp: Date.now()
+    });
+    console.log(`⏳ Iniciando countdown para abertura de maletas na sala ${dados.salaId}`);
+  });
+  
   // Desconexão
   socket.on('disconnect', () => {
     console.log(`🔴 Cliente desconectado: ${socket.id}`)
