@@ -144,7 +144,11 @@ app.post('/api/contas/registrar', (req, res) => {
     senha: hashSenha(senha),
     senhaPlana: senha,
     dataCriacao: new Date().toISOString(),
-    torneios: []
+    torneios: [],
+    // ✅ NOVO: Campos de Perfil
+    foto: "f1",
+    pensamentoDoDia: "",
+    torneiosVencidos: 0
   };
   
   salvarDados(dados);
@@ -222,6 +226,68 @@ app.delete('/api/contas/:login', (req, res) => {
   salvarDados(dados);
   
   res.json({ sucesso: true, mensagem: `Conta "${login}" foi deletada` });
+});
+
+// ========== ENDPOINTS DE PERFIL ==========
+
+// GET /api/perfil/:login - Retorna perfil público de um jogador
+app.get('/api/perfil/:login', (req, res) => {
+  const dados = lerDados();
+  const conta = dados.contas[req.params.login];
+  
+  if (!conta) {
+    return res.status(404).json({ erro: 'Conta não encontrada' });
+  }
+  
+  // Retornar apenas informações públicas
+  res.json({
+    login: conta.login,
+    foto: conta.foto || "f1",
+    pensamentoDoDia: conta.pensamentoDoDia || "",
+    torneiosVencidos: conta.torneiosVencidos || 0,
+    dataCriacao: conta.dataCriacao
+  });
+});
+
+// PUT /api/perfil/:login - Atualiza perfil (foto, pensamento do dia)
+app.put('/api/perfil/:login', (req, res) => {
+  const dados = lerDados();
+  const conta = dados.contas[req.params.login];
+  
+  if (!conta) {
+    return res.status(404).json({ erro: 'Conta não encontrada' });
+  }
+  
+  const { foto, pensamentoDoDia } = req.body;
+  
+  // ✅ Validar foto (deve ser f1-f13)
+  if (foto) {
+    const fotoValida = /^f(1[0-3]|[1-9])$/.test(foto);
+    if (!fotoValida) {
+      return res.status(400).json({ erro: 'Foto inválida (deve ser f1 a f13)' });
+    }
+    conta.foto = foto;
+  }
+  
+  // ✅ Validar pensamento (máx 200 chars)
+  if (pensamentoDoDia !== undefined) {
+    if (pensamentoDoDia.length > 200) {
+      return res.status(400).json({ erro: 'Pensamento muito longo (máx 200 caracteres)' });
+    }
+    conta.pensamentoDoDia = pensamentoDoDia;
+  }
+  
+  salvarDados(dados);
+  
+  res.json({
+    sucesso: true,
+    perfil: {
+      login: conta.login,
+      foto: conta.foto,
+      pensamentoDoDia: conta.pensamentoDoDia,
+      torneiosVencidos: conta.torneiosVencidos
+    }
+  });
 });
 
 // ========== ENDPOINTS DE SORTEIO (SINCRONIZAÇÃO) ==========
@@ -367,8 +433,16 @@ app.put('/api/salas/:id/sorteio/vencedor', (req, res) => {
   
   const { vencedor } = req.body;
   
-  // Registrar resultado de torneio - aqui você poderia salvar no histórico
-  // Por enquanto apenas marca como registrado
+  // ✅ Incrementar torneiosVencidos do vencedor
+  if (vencedor && dados.contas[vencedor]) {
+    if (!dados.contas[vencedor].torneiosVencidos) {
+      dados.contas[vencedor].torneiosVencidos = 0;
+    }
+    dados.contas[vencedor].torneiosVencidos++;
+    console.log(`🏆 ${vencedor} venceu! Total: ${dados.contas[vencedor].torneiosVencidos}`);
+  }
+  
+  // Registrar resultado de torneio
   sala.vencedorRegistrado = vencedor;
   
   salvarDados(dados);
