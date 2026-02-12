@@ -1593,8 +1593,12 @@ async function iniciarSorteioNoServidor(ordem) {
       throw new Error("❌ CRÍTICO: salaAtual é null em iniciarSorteioNoServidor()");
     }
     
-    // ✅ LIMPAR ESTADO DO JOGO ANTERIOR ANTES DE INICIAR
-    resetarEstadoDoJogo();
+    // ✅ VALIDAÇÃO: ordem DEVE ter pelo menos 2 jogadores
+    if (!ordem || ordem.length < 2) {
+      throw new Error(`❌ CRÍTICO: ordem inválida! ordem=${JSON.stringify(ordem)}`);
+    }
+    
+    console.error(`🔴 [ENVIANDO] Ordem para servidor: [${ordem.join(', ')}]`);
     
     // 🔄 CRÍTICO: Recarregar salas FRESCO do servidor primeiro
     console.error(`🔴 [CRÍTICO] Recarregando salas antes de iniciar sorteio...`);
@@ -1623,7 +1627,7 @@ async function iniciarSorteioNoServidor(ordem) {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ 
-        ordem: ordem,
+        ordem: ordem,  // ✅ Usa o parâmetro ordem, NÃO a global zerada!
         totalMaletas: totalMaletas
       })
     });
@@ -1642,6 +1646,9 @@ async function iniciarSorteioNoServidor(ordem) {
       });
       console.error(`   VAI CHAMAR criarMaletas() COM turnoAtual=${resultado.sala.turnoAtual}`);
       
+      // ✅ AGORA sim, resetar o estado local APÓS confirmar com servidor
+      resetarEstadoDoJogo();
+      
       // Atualizar salaAtual com o estado do servidor
       salaAtual = resultado.sala;
       criarMaletas();
@@ -1649,8 +1656,8 @@ async function iniciarSorteioNoServidor(ordem) {
       alert("❌ Erro ao iniciar sorteio no servidor");
     }
   } catch (e) {
-    console.error("Erro ao iniciar sorteio:", e);
-    alert("❌ Erro ao iniciar sorteio");
+    console.error("❌ Erro ao iniciar sorteio:", e);
+    alert("❌ Erro ao iniciar sorteio: " + e.message);
   }
 }
 
