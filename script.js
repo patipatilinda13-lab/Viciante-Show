@@ -245,27 +245,6 @@ function configurarListenersSocket() {
     }
   });
   
-  // Próxima rodada iniciada
-  socket.on('sorteio:proxima', (dados) => {
-    if (telaJogo.style.display !== "none" && salaAtual && salaAtual.id === dados.salaId) {
-      console.log(`🔄 Próxima rodada iniciada`);
-      carregarSalas().then(() => {
-        const salaNova = salas.find(s => s.id === salaAtual.id);
-        if (salaNova) {
-          salaAtual = salaNova;
-          maletas = salaAtual.maletas || [];
-          turnoAtual = salaAtual.turnoAtual || 0;
-          ordem = salaAtual.ordem || [];
-          
-          resultado.classList.add("hidden");
-          resultadoTexto.classList.remove("vitoria");
-          criarMaletas();
-          status.textContent = `Vez de ${ordem[turnoAtual]}`;
-        }
-      });
-    }
-  });
-  
   // Jogador entrou na sala
   socket.on('sala:jogador-entrou', (dados) => {
     console.log(`👤 ${dados.jogadorNome} entrou`);
