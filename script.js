@@ -129,6 +129,7 @@ let idJogadorAtual = null;
 let sessionIdAtual = null;
 let usuarioLogadoAtual = null;
 let ultimaAtividadeTimestamp = null;
+let inicializandoSorteio = false; // 🛡️ Flag para proteger durante inicialização
 
 // 🧹 LIMPEZA DE CACHE ANTIGO - Função para resetar localStorage
 function limparCacheAntigo() {
@@ -410,6 +411,13 @@ function configurarListenersSocket() {
   socket.on('sorteio:iniciado', (dados) => {
     console.error(`🔴 [SOCKET] 'sorteio:iniciado' recebido para sala ${dados.salaId}`);
     console.error(`   Ordem DO SERVIDOR: [${dados.ordem.join(', ')}]`);
+    console.error(`   🛡️ inicializandoSorteio = ${inicializandoSorteio}`);
+    
+    // 🛡️ PROTEÇÃO: Se estamos inicializando, não limpe o estado ainda
+    if (inicializandoSorteio) {
+      console.error(`   🛡️ IGNORANDO reset porque estamos inicializando o sorteio`);
+      return;
+    }
     
     if (salaAtual && salaAtual.id === dados.salaId) {
       console.error(`🔴   salaAtual.turnoAtual ANTES de reset: ${salaAtual.turnoAtual}`);
@@ -1581,23 +1589,37 @@ function iniciarOSorteio() {
   telaSalaGerenciamento.style.display = "none";
   telaJogo.style.display = "block";
 
-  // Chamar API para iniciar sorteio no servidor
-  iniciarSorteioNoServidor(ordem);
-  
-  // Sincronizar com Socket.io para todos os participantes irem para a tela de jogo
-  if (socket && socket.connected && salaAtual && salaAtual.id) {  // ✅ Validar salaAtual antes de usar
-    socket.emit('sorteio:iniciado', {
-      salaId: salaAtual.id,
-      ordem: ordem
-    });
-    console.log('📺 Sorteio iniciado - notificando todos os clientes');
-  } else {
-    console.error(`⚠️ AVISO: Socket não conectado ou salaAtual perdido!`);
-  }
+  // ✅ AGORA: Chamar iniciarSorteioNoServidor() com await para garantir conclusão
+  iniciarSorteioNoServidor(ordem).then(() => {
+    // ✅ APENAS DEPOIS que sorteio foi iniciado no servidor,
+    // Sincronizar com Socket.io para todos os participantes
+    console.error(`✅ iniciarSorteioNoServidor() completado, agora emitindo socket...`);
+    console.error(`   salaAtual.id: ${salaAtual?.id}`);
+    console.error(`   salaAtual.ordem: [${salaAtual?.ordem?.join(', ') || 'VAZIO'}]`);
+    
+    if (socket && socket.connected && salaAtual && salaAtual.id) {
+      socket.emit('sorteio:iniciado', {
+        salaId: salaAtual.id,
+        ordem: salaAtual.ordem  // ✅ Usar ordem do servidor, não local
+      });
+      console.log('📺 Sorteio iniciado - notificando todos os clientes');
+    } else {
+      console.error(`⚠️ AVISO: Socket não conectado ou salaAtual perdido!`);
+      console.error(`   socket.connected: ${socket?.connected}`);
+      console.error(`   salaAtual: ${salaAtual ? 'SIM' : 'null'}`);
+      console.error(`   salaAtual.id: ${salaAtual?.id}`);
+    }
+  }).catch((erro) => {
+    console.error(`❌ Erro ao iniciar sorteio, não notificando clientes:`, erro);
+  });
 }
 
 async function iniciarSorteioNoServidor(ordem) {
   try {
+    // 🛡️ ATIVAR PROTEÇÃO CONTRA LISTENERS DURANTE INICIALIZAÇÃO
+    inicializandoSorteio = true;
+    console.error(`🛡️ 🛡️ 🛡️ PROTEÇÃO ATIVADA: inicializandoSorteio = true`);
+    
     // ✅ VALIDAÇÃO: salaAtual DEVE existir nesse ponto
     if (!salaAtual || !salaAtual.id) {
       throw new Error("❌ CRÍTICO: salaAtual é null em iniciarSorteioNoServidor()");
@@ -1612,74 +1634,63 @@ async function iniciarSorteioNoServidor(ordem) {
     console.error(`🔴 [ENVIANDO] Ordem para servidor: [${ordem.join(', ')}]`);
     console.error(`🔴 [ENVIANDO] Para sala ID: ${salaIdSeguro}`);
     
-    // 🔄 CRÍTICO: Recarregar salas FRESCO do servidor primeiro
-    console.error(`🔴 [CRÍTICO] Recarregando salas antes de iniciar sorteio...`);
-    await carregarSalas();
-    
-    // ✅ VALIDAÇÃO PÓS-CARREGAMENTO: salaAtual ainda deve existir!
-    if (!salaAtual || !salaAtual.id) {
-      throw new Error("❌ CRÍTICO: salaAtual virou null após carregarSalas()!");
-    }
-    
-    // Pegar a sala MAIS FRESCA
-    const salaFresca = salas.find(s => s.id === salaIdSeguro);  // ✅ Usar ID local, não salaAtual.id
-    if (salaFresca) {
-      console.error(`🔴 Sala recarregada do servidor:`);
-      console.error(`   turnoAtual antes: ${salaFresca.turnoAtual}`);
-      console.error(`   maletas: ${salaFresca.maletas?.length || 0}`);
-      console.error(`   ordem: [${(salaFresca.ordem || []).join(', ')}]`);
-      console.error(`   jogadores: ${salaFresca.jogadores?.length || 0}`);
-      
-      // ⚠️ Se a sala tem maletas antigas, logs de erro!
-      if (salaFresca.maletas && salaFresca.maletas.some(m => m.dono)) {
-        console.error(`❌ AVISO: Sala tem maletas com DONOS! Podem ser de um sorteio antigo!`);
-        console.error(`   Detalhes:`);
-        salaFresca.maletas.forEach((m, i) => {
-          if (m.dono) console.error(`      Maleta ${i+1}: dono="${m.dono}"`);
-        });
-      }
-    }
-    
-    // ✅ VALIDAÇÃO FINAL: Antes de fazer fetch, garantir salaAtual.id novamente
-    if (!salaAtual || !salaAtual.id) {
-      throw new Error("❌ CRÍTICO: salaAtual.id é null ANTES do fetch!");
-    }
-    
-    const response = await fetch(`${API_URL}/api/salas/${salaIdSeguro}/sorteio`, {  // ✅ Usar ID local guardado
+    // ✅ PRIMEIRO: Enviar PUT para iniciar sorteio no servidor
+    console.error(`🔴 [CRÍTICO] Enviando PUT para iniciar sorteio no servidor...`);
+    const response = await fetch(`${API_URL}/api/salas/${salaIdSeguro}/sorteio`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ 
-        ordem: ordem,  // ✅ Usa o parâmetro ordem, NÃO a global zerada!
+        ordem: ordem,  // ✅ Usa o parâmetro ordem
         totalMaletas: totalMaletas
       })
     });
     
     const resultado = await response.json();
     
-    if (resultado.sucesso) {
-      // 🔍 DEBUG CRÍTICO - INICIANDO SORTEIO
-      console.error(`🔴 SORTEIO INICIADO NO SERVIDOR:`);
-      console.error(`   API retornou turnoAtual: ${resultado.sala.turnoAtual}`);
-      console.error(`   Ordem: [${resultado.sala.ordem.join(', ')}]`);
-      console.error(`   ordem.length: ${resultado.sala.ordem.length}`);
-      console.error(`   Maletas do SERVIDOR (respondidas pela API):`);
-      resultado.sala.maletas.forEach((m, i) => {
-        console.error(`      Maleta ${i+1}: dono="${m.dono || 'null'}", premio=${m.premio}`);
-      });
-      console.error(`   VAI CHAMAR criarMaletas() COM turnoAtual=${resultado.sala.turnoAtual}`);
-      
-      // ✅ AGORA sim, resetar o estado local APÓS confirmar com servidor
-      resetarEstadoDoJogo();
-      
-      // Atualizar salaAtual com o estado do servidor
-      salaAtual = resultado.sala;
-      criarMaletas();
-    } else {
-      alert("❌ Erro ao iniciar sorteio no servidor");
+    if (!resultado.sucesso) {
+      throw new Error(`Erro do servidor: ${resultado.erro || 'desconhecido'}`);
     }
+    
+    // 🔍 DEBUG CRÍTICO - SORTEIO INICIADO NO SERVIDOR
+    console.error(`🔴 SORTEIO INICIADO NO SERVIDOR:`);
+    console.error(`   Ordem: [${resultado.sala.ordem.join(', ')}]`);
+    console.error(`   turnoAtual: ${resultado.sala.turnoAtual}`);
+    console.error(`   Maletas: ${resultado.sala.maletas.length}`);
+    
+    // ✅ SEGUNDO: Recarregar salas para garantir sincronização
+    console.error(`🔴 [CRÍTICO] Recarregando salas após PUT...`);
+    await carregarSalas();
+    
+    // ✅ TERCEIRO: Validação pós-carregamento
+    if (!salaAtual || !salaAtual.id) {
+      throw new Error("❌ CRÍTICO: salaAtual virou null após carregarSalas()!");
+    }
+    
+    // Pegar a sala MAIS FRESCA
+    const salaFresca = salas.find(s => s.id === salaIdSeguro);
+    if (salaFresca) {
+      console.error(`🔴 Sala recarregada do servidor:`);
+      console.error(`   turnoAtual: ${salaFresca.turnoAtual}`);
+      console.error(`   ordem: [${(salaFresca.ordem || []).join(', ')}]`);
+      console.error(`   maletas com dono: ${salaFresca.maletas.filter(m => m.dono).length}`);
+    }
+    
+    // ✅ QUARTO: Resetar estado local e renderizar
+    resetarEstadoDoJogo();
+    
+    // Atualizar salaAtual com o estado do servidor
+    salaAtual = resultado.sala;
+    criarMaletas();
+    
+    console.error(`✅ Sorteio iniciado com SUCESSO!`);
+    
   } catch (e) {
     console.error("❌ Erro ao iniciar sorteio:", e);
     alert("❌ Erro ao iniciar sorteio: " + e.message);
+  } finally {
+    // 🛡️ DESATIVAR PROTEÇÃO SEMPRE, mesmo se houve erro
+    inicializandoSorteio = false;
+    console.error(`🛡️ 🛡️ 🛡️ PROTEÇÃO DESATIVADA: inicializandoSorteio = false`);
   }
 }
 

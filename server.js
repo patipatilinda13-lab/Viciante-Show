@@ -321,24 +321,37 @@ app.put('/api/salas/:id/sorteio', (req, res) => {
   const dados = lerDados();
   const sala = dados.salas.find(s => s.id === parseInt(req.params.id));
   
+  console.error(`🔴 [SORTEIO] PUT /api/salas/${req.params.id}/sorteio - INICIANDO`);
+  
   if (!sala) {
+    console.error(`❌ ERRO: Sala não encontrada`);
     return res.status(404).json({ erro: 'Sala não encontrada' });
   }
   
   const { ordem, totalMaletas } = req.body;
   
+  console.error(`   Ordem recebida: [${(ordem || []).join(', ')}]`);
+  console.error(`   TotalMaletas: ${totalMaletas}`);
+  
   if (!ordem || ordem.length < 2) {
+    console.error(`❌ ERRO: Ordem inválida`);
     return res.status(400).json({ erro: 'Precisa de pelo menos 2 jogadores' });
   }
+  
+  console.error(`✅ Atualizando sala ${sala.id}...`);
   
   // ✅ RESETAR TUDO DO SORTEIO ANTERIOR
   sala.sorteioAtivo = true;
   sala.descuento = true;
-  sala.ordem = ordem;
+  sala.ordem = ordem;  // ✅ SETANDO A ORDEM
   sala.turnoAtual = 0;
   sala.revelado = false;
   sala.vencedor = null;
   sala.vencedorRegistrado = null;
+  
+  console.error(`   sorteioAtivo = true`);
+  console.error(`   ordem = [${sala.ordem.join(', ')}]`);
+  console.error(`   turnoAtual = 0`);
   
   // 🔥 FORCE CLEAR DE MALETAS ANTIGAS - GARANTIR LIMPEZA TOTAL
   sala.maletas = [];
@@ -352,12 +365,20 @@ app.put('/api/salas/:id/sorteio', (req, res) => {
     premio: i === indicePremiada
   }));
   
+  console.error(`   Maletas criadas: ${sala.maletas.length}`);
+  console.error(`   Maleta premiada: #${indicePremiada + 1}`);
+  
   salvarDados(dados);
+  console.error(`✅ Dados salvos em data.json`);
+  
+  // Verificar que foi salvo corretamente
+  console.error(`   VERIFICAÇÃO PÓS-SAVE:`);
+  console.error(`   sala.ordem no objeto ANTES de retornar: [${sala.ordem.join(', ')}]`);
+  console.error(`   sala.turnoAtual: ${sala.turnoAtual}`);
+  console.error(`   sala.maletas.length: ${sala.maletas.length}`);
+  
   console.log(`✅ [Sala ${sala.id}] Novo sorteio iniciado - Ordem: ${ordem.join(' → ')}`);
-  console.log(`   Maletas criadas LIMPAS com dono=null`);
-  console.log(`   sorteioAtivo: ${sala.sorteioAtivo}`);
-  console.log(`   turnoAtual: ${sala.turnoAtual}`);
-  console.log(`   Dados salvos em data.json`);
+  
   res.json({ sucesso: true, sala });
 });
 
@@ -371,7 +392,9 @@ app.post('/api/salas/:id/maleta', (req, res) => {
   if (sala) {
     console.error(`   sorteioAtivo: ${sala.sorteioAtivo}`);
     console.error(`   turnoAtual: ${sala.turnoAtual}`);
+    console.error(`   ordem.length: ${sala.ordem?.length || 0}`);
     console.error(`   ordem: [${(sala.ordem || []).join(', ')}]`);
+    console.error(`   CHECK: turnoAtual (${sala.turnoAtual}) >= ordem.length (${sala.ordem?.length || 0}) = ${sala.turnoAtual >= (sala.ordem?.length || 0)}`);
   }
   
   if (!sala || !sala.sorteioAtivo) {
@@ -384,32 +407,53 @@ app.post('/api/salas/:id/maleta', (req, res) => {
   
   const { numeroMaleta, jogador } = req.body;
   
+  console.error(`   numeroMaleta solicitada: ${numeroMaleta}`);
+  console.error(`   jogador solicitante: ${jogador}`);
+  
   if (!numeroMaleta || numeroMaleta < 1 || numeroMaleta > sala.maletas.length) {
+    console.error(`❌ ERRO: Número de maleta inválido`);
     return res.status(400).json({ erro: 'Número de maleta inválido' });
   }
   
+  if (!sala.ordem || sala.ordem.length === 0) {
+    console.error(`❌ ERRO CRÍTICO: Ordem vazia ou undefined! turnoAtual=${sala.turnoAtual}, ordem=${JSON.stringify(sala.ordem)}`);
+    return res.status(400).json({ erro: 'Ordem do sorteio está vazia - sorteio inválido' });
+  }
+  
   if (sala.turnoAtual >= sala.ordem.length) {
+    console.error(`❌ ERRO: Sorteio já terminou (turnoAtual ${sala.turnoAtual} >= ordem.length ${sala.ordem.length})`);
     return res.status(400).json({ erro: 'Sorteio já terminou' });
   }
   
   // VALIDAÇÃO RIGOROSA DE TURNO: Verificar que quem está clicando é o jogador correto
   const jogadorDaVez = sala.ordem[sala.turnoAtual];
   
+  console.error(`   Jogador da vez (ordem[${sala.turnoAtual}]): ${jogadorDaVez}`);
+  
   if (jogador !== jogadorDaVez) {
+    console.error(`❌ ERRO: Não é a vez de ${jogador}. É a vez de ${jogadorDaVez}`);
     return res.status(403).json({ erro: `Não é sua vez! Aguarde ${jogadorDaVez}` });
   }
   
   const maleta = sala.maletas[numeroMaleta - 1];
   
+  console.error(`   Maleta #${numeroMaleta} - dono atual: ${maleta.dono || 'null'}`);
+  
   if (maleta.dono !== null) {
+    console.error(`❌ ERRO: Maleta ${numeroMaleta} já foi escolhida por ${maleta.dono}`);
     return res.status(400).json({ erro: 'Maleta já foi escolhida' });
   }
   
-  // Atualizar maleta (inclusão e incremento são práximos, minimizando race condition)
+  // Atualizar maleta (inclusão e incremento são próximos, minimizando race condition)
   maleta.dono = jogadorDaVez;
   sala.turnoAtual++;
   
+  console.error(`   ✅ Maleta ${numeroMaleta} atribuída a ${jogadorDaVez}`);
+  console.error(`   ✅ turnoAtual incrementado: ${sala.turnoAtual - 1} → ${sala.turnoAtual}`);
+  
   salvarDados(dados);
+  console.error(`   ✅ Dados salvos em data.json`);
+  
   res.json({ sucesso: true, sala });
 });
 
