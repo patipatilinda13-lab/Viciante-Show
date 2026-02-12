@@ -47,7 +47,8 @@ const CHAVE_USUARIO_LOGADO = "vicianteshow_usuario_logado";
 
 // URL do servidor - API sempre no Render!
 // Quando testar localmente, descomente a linha com localhost
-const API_URL = 'https://viciante-show.onrender.com';
+const API_URL = 'http://localhost:3000'; // ← TESTANDO LOCALMENTE
+// const API_URL = 'https://viciante-show.onrender.com'; // ← PRODUCTION
 // const API_URL = 'http://localhost:3000'; // Descomentar apenas para testes locais
 
 // Inicializar Socket.io
@@ -1651,18 +1652,10 @@ function iniciarOSorteio() {
     console.error(`   salaAtual.id: ${salaAtual?.id}`);
     console.error(`   salaAtual.ordem: [${salaAtual?.ordem?.join(', ') || 'VAZIO'}]`);
     
-    if (socket && socket.connected && salaAtual && salaAtual.id) {
-      socket.emit('sorteio:iniciado', {
-        salaId: salaAtual.id,
-        ordem: salaAtual.ordem  // ✅ Usar ordem do servidor, não local
-      });
-      console.log('📺 Sorteio iniciado - notificando todos os clientes');
-    } else {
-      console.error(`⚠️ AVISO: Socket não conectado ou salaAtual perdido!`);
-      console.error(`   socket.connected: ${socket?.connected}`);
-      console.error(`   salaAtual: ${salaAtual ? 'SIM' : 'null'}`);
-      console.error(`   salaAtual.id: ${salaAtual?.id}`);
-    }
+    // ❌ NÃO EMITIR socket.emit('sorteio:iniciado') AQUI
+    // O Servidor já emitiu para todos via io.to(sala_${salaId}).emit('sorteio:iniciado')
+    // na rota PUT /api/salas/:id/sorteio, então apenas esperamos receber via socket.on()
+    console.log('✅ Sorteio inicializado no servidor - aguardando confirmação via socket.io');
   }).catch((erro) => {
     console.error(`❌ Erro ao iniciar sorteio, não notificando clientes:`, erro);
   });
@@ -2212,15 +2205,9 @@ async function escolherMaleta(index) {
       criarMaletas();
       console.log(`🎨 UI renderizada após abertura de maleta`);
       
-      // Emitir evento WebSocket para TODOS os outros jogadores
-      if (socket && socket.connected) {
-        socket.emit('maleta:aberta', {
-          salaId: salaAtual.id,
-          numeroMaleta: index + 1,
-          jogadorDaVez: nomeJogadorAtual
-        });
-        console.log(`📡 Evento 'maleta:aberta' emitido para outros jogadores`);
-      }
+      // ❌ NÃO EMITIR socket.emit('maleta:aberta') AQUI
+      // O Servidor já emitiu para todos via io.to(sala_${salaId}).emit('maleta:aberta') 
+      // na rota POST /api/salas/:id/maleta, então apenas esperamos receber via socket.on()
       
       // Feedback visual imediato
       mostrarToast(`✅ Você escolheu a Maleta ${index + 1}!`, 2000);

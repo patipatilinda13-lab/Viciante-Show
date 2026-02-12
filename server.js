@@ -433,6 +433,14 @@ app.put('/api/salas/:id/sorteio', async (req, res) => {
     
     console.error(`   ✅ Sorteio iniciado: ordem=[${ordem.join(', ')}]`);
     console.error(`   Maleta premiada: #${indicePremiada + 1}`);
+    
+    // 🔥 CORREÇÃO: O SERVIDOR AVISA QUE COMEÇOU
+    io.to(`sala_${salaId}`).emit('sorteio:iniciado', {
+      salaId,
+      ordem: sala.ordem,
+      timestamp: Date.now()
+    });
+
     res.json({ sucesso: true, sala });
   } catch (e) {
     console.error(e);
@@ -446,17 +454,10 @@ app.post('/api/salas/:id/maleta', async (req, res) => {
     const salaId = parseInt(req.params.id);
     const { numeroMaleta, jogador } = req.body;
 
-    console.error(`🔴 [MALETA] POST /api/salas/${salaId}/maleta`);
+    console.error(`🔴 [MALETA] POST /api/salas/${salaId}/maleta - ${jogador} tentando abrir #${numeroMaleta}`);
 
     const sala = await Sala.findOne({ id: salaId });
     
-    console.error(`   Sala encontrada? ${sala ? 'SIM' : 'NÃO'}`);
-    if (sala) {
-      console.error(`   sorteioAtivo: ${sala.sorteioAtivo}`);
-      console.error(`   turnoAtual: ${sala.turnoAtual}`);
-      console.error(`   ordem: [${(sala.ordem || []).join(', ')}]`);
-    }
-
     if (!sala || !sala.sorteioAtivo) {
       return res.status(400).json({ erro: 'Sorteio não está ativo' });
     }
@@ -489,13 +490,24 @@ app.post('/api/salas/:id/maleta', async (req, res) => {
       return res.status(400).json({ erro: 'Maleta já foi escolhida' });
     }
 
+    // Atualizar Banco
     maleta.dono = jogador;
     sala.turnoAtual++;
 
     await sala.save();
 
     console.error(`   ✅ Maleta ${numeroMaleta} atribuída a ${jogador}`);
-    console.error(`   turnoAtual: ${sala.turnoAtual - 1} → ${sala.turnoAtual}`);
+    console.error(`   Turno avançou: ${sala.turnoAtual - 1} → ${sala.turnoAtual}`);
+
+    // 🔥 CORREÇÃO: O SERVIDOR AVISA QUE A MALETA ABRIU
+    // Envia o estado ATUALIZADO da sala para garantir sincronia
+    io.to(`sala_${salaId}`).emit('maleta:aberta', {
+      salaId,
+      numeroMaleta,
+      jogadorDaVez: jogador,
+      salaAtualizada: sala, 
+      timestamp: Date.now()
+    });
 
     res.json({ sucesso: true, sala });
   } catch (e) {
@@ -507,24 +519,30 @@ app.post('/api/salas/:id/maleta', async (req, res) => {
 // PUT /api/salas/:id/sorteio/revelar
 app.put('/api/salas/:id/sorteio/revelar', async (req, res) => {
   try {
-    const sala = await Sala.findOne({ id: parseInt(req.params.id) });
+    const salaId = parseInt(req.params.id);
+    const sala = await Sala.findOne({ id: salaId });
     if (!sala) return res.status(404).json({ erro: 'Sala não encontrada' });
 
+    // Lógica de vencedor
     const maletaPremio = sala.maletas.find(m => m.premio && m.dono);
     const vencedor = maletaPremio ? maletaPremio.dono : null;
 
     sala.revelado = true;
     sala.vencedor = vencedor;
-
     await sala.save();
 
     if (vencedor) {
-      await Conta.updateOne(
-        { login: vencedor },
-        { $inc: { torneiosVencidos: 1 } }
-      );
+      await Conta.updateOne({ login: vencedor }, { $inc: { torneiosVencidos: 1 } });
       console.log(`🏆 ${vencedor} venceu!`);
     }
+
+    // 🔥 CORREÇÃO: O SERVIDOR AVISA A REVELAÇÃO
+    io.to(`sala_${salaId}`).emit('sorteio:revelado', {
+      salaId: salaId,
+      vencedor: vencedor,
+      maletas: sala.maletas,
+      timestamp: Date.now()
+    });
 
     res.json({ sucesso: true, vencedor, sala });
   } catch (e) {
@@ -686,28 +704,9 @@ io.on('connection', (socket) => {
     });
   });
   
-  socket.on('maleta:aberta', async (dados) => {
-    const sala = await Sala.findOne({ id: parseInt(dados.salaId) });
-    io.to(`sala_${dados.salaId}`).emit('maleta:aberta', {
-      ...dados,
-      salaAtualizada: sala,
-      timestamp: Date.now()
-    });
-  });
-  
-  socket.on('sorteio:revelado', (dados) => {
-    io.to(`sala_${dados.salaId}`).emit('sorteio:revelado', {
-      ...dados,
-      timestamp: Date.now()
-    });
-  });
-  
-  socket.on('sorteio:proxima', (dados) => {
-    io.to(`sala_${dados.salaId}`).emit('sorteio:proxima', {
-      ...dados,
-      timestamp: Date.now()
-    });
-  });
+  // ❌ REMOVEMOS socket.on('maleta:aberta', ...) - O SERVIDOR EMITE AGORA NA ROTA POST
+  // ❌ REMOVEMOS socket.on('sorteio:revelado', ...) - O SERVIDOR EMITE AGORA NA ROTA PUT
+  // ❌ REMOVEMOS socket.on('sorteio:proxima', ...) - O SERVIDOR EMITE AGORA NA ROTA PUT
   
   socket.on('participante:adicionado', (dados) => {
     io.emit('participante:adicionado', {
@@ -736,13 +735,6 @@ io.on('connection', (socket) => {
       timestamp: Date.now()
     });
     io.emit('participante:removido', {
-      ...dados,
-      timestamp: Date.now()
-    });
-  });
-  
-  socket.on('sorteio:iniciado', (dados) => {
-    io.emit('sorteio:iniciado', {
       ...dados,
       timestamp: Date.now()
     });
