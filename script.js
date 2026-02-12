@@ -1207,6 +1207,14 @@ async function finalizarEntradaNaSala(sala) {
     console.error(`⚠️ Sala não encontrada no servidor, usando dados locais`);
   }
   
+  // ✅ VALIDAÇÃO CRÍTICA: salaAtual DEVE ter um id válido
+  if (!salaAtual || !salaAtual.id) {
+    console.error(`❌ ERRO CRÍTICO: salaAtual não tem ID após entrar-sala!`);
+    console.error(`   salaAtual:`, salaAtual);
+    alert("❌ ERRO: Sala sem ID. Tente entrar novamente.");
+    return;
+  }
+  
   // Salvar sessão atual no localStorage
   const sessaoAtual = {
     salaId: salaAtual.id,
@@ -1577,13 +1585,14 @@ function iniciarOSorteio() {
   iniciarSorteioNoServidor(ordem);
   
   // Sincronizar com Socket.io para todos os participantes irem para a tela de jogo
-  if (socket && socket.connected) {
+  if (socket && socket.connected && salaAtual && salaAtual.id) {  // ✅ Validar salaAtual antes de usar
     socket.emit('sorteio:iniciado', {
       salaId: salaAtual.id,
       ordem: ordem
     });
     console.log('📺 Sorteio iniciado - notificando todos os clientes');
-  }
+  } else {
+    console.error(`⚠️ AVISO: Socket não conectado ou salaAtual perdido!`);
 }
 
 async function iniciarSorteioNoServidor(ordem) {
@@ -1598,14 +1607,21 @@ async function iniciarSorteioNoServidor(ordem) {
       throw new Error(`❌ CRÍTICO: ordem inválida! ordem=${JSON.stringify(ordem)}`);
     }
     
+    const salaIdSeguro = salaAtual.id;  // ✅ Copiar ID para variável local para evitar race condition
     console.error(`🔴 [ENVIANDO] Ordem para servidor: [${ordem.join(', ')}]`);
+    console.error(`🔴 [ENVIANDO] Para sala ID: ${salaIdSeguro}`);
     
     // 🔄 CRÍTICO: Recarregar salas FRESCO do servidor primeiro
     console.error(`🔴 [CRÍTICO] Recarregando salas antes de iniciar sorteio...`);
     await carregarSalas();
     
+    // ✅ VALIDAÇÃO PÓS-CARREGAMENTO: salaAtual ainda deve existir!
+    if (!salaAtual || !salaAtual.id) {
+      throw new Error("❌ CRÍTICO: salaAtual virou null após carregarSalas()!");
+    }
+    
     // Pegar a sala MAIS FRESCA
-    const salaFresca = salas.find(s => s.id === salaAtual.id);
+    const salaFresca = salas.find(s => s.id === salaIdSeguro);  // ✅ Usar ID local, não salaAtual.id
     if (salaFresca) {
       console.error(`🔴 Sala recarregada do servidor:`);
       console.error(`   turnoAtual antes: ${salaFresca.turnoAtual}`);
@@ -1623,7 +1639,12 @@ async function iniciarSorteioNoServidor(ordem) {
       }
     }
     
-    const response = await fetch(`${API_URL}/api/salas/${salaAtual.id}/sorteio`, {
+    // ✅ VALIDAÇÃO FINAL: Antes de fazer fetch, garantir salaAtual.id novamente
+    if (!salaAtual || !salaAtual.id) {
+      throw new Error("❌ CRÍTICO: salaAtual.id é null ANTES do fetch!");
+    }
+    
+    const response = await fetch(`${API_URL}/api/salas/${salaIdSeguro}/sorteio`, {  // ✅ Usar ID local guardado
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ 
