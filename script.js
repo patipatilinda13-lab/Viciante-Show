@@ -429,6 +429,7 @@ function configurarListenersSocket() {
     console.error(`🔴 [SOCKET] 'sorteio:iniciado' recebido para sala ${dados.salaId}`);
     console.error(`   Ordem DO SERVIDOR: [${dados.ordem.join(', ')}]`);
     console.error(`   🛡️ inicializandoSorteio = ${inicializandoSorteio}`);
+    console.error(`   🛡️ salaAtual.sorteioAtivo = ${salaAtual?.sorteioAtivo}`);
     
     // 🛡️ PROTEÇÃO: Se estamos inicializando, não limpe o estado ainda
     if (inicializandoSorteio) {
@@ -436,8 +437,17 @@ function configurarListenersSocket() {
       return;
     }
     
-    if (salaAtual && salaAtual.id === dados.salaId) {
-      console.error(`🔴   salaAtual.turnoAtual ANTES de reset: ${salaAtual.turnoAtual}`);
+    // 🛡️ PROTEÇÃO: Se sorteio já está ativo, não resete!
+    // (Isso significa que já estamos no meio da escolha das maletas)
+    if (salaAtual && salaAtual.sorteioAtivo) {
+      console.error(`   🛡️ IGNORANDO reset porque sorteio já está ATIVO (já estamos escolhendo maletas)`);
+      console.error(`   Este evento é provavelmente uma retransmissão atrasada`);
+      return;
+    }
+    
+    // ✅ APENAS reseta se sorteio NÃO estava ativo (novo sorteio começando)
+    if (salaAtual && salaAtual.id === dados.salaId && !salaAtual.sorteioAtivo) {
+      console.error(`   ✅ Novo sorteio detectado. Resetando estado anterior...`);
       
       // ✅ RESETAR COMPLETAMENTE ESTADO ANTERIOR
       houveVencedor = false;
@@ -1703,30 +1713,26 @@ async function iniciarSorteioNoServidor(ordem) {
     console.error(`   Ordem: [${resultado.sala.ordem.join(', ')}]`);
     console.error(`   turnoAtual: ${resultado.sala.turnoAtual}`);
     console.error(`   Maletas: ${resultado.sala.maletas.length}`);
+    console.error(`   sorteioAtivo: ${resultado.sala.sorteioAtivo}`);
     
-    // ✅ SEGUNDO: Recarregar salas para garantir sincronização
-    console.error(`🔴 [CRÍTICO] Recarregando salas após PUT...`);
-    await carregarSalas();
+    // ✅ CRÍTICO: Use o resultado do servidor DIRETAMENTE, não faça fetch extra
+    // carregarSalas() pode degradar o estado ou causar race conditions
+    console.error(`🔴 Usando estado fresco do servidor, pulando carregarSalas()...`);
     
-    // ✅ TERCEIRO: Validação pós-carregamento
-    if (!salaAtual || !salaAtual.id) {
-      throw new Error("❌ CRÍTICO: salaAtual virou null após carregarSalas()!");
-    }
-    
-    // Pegar a sala MAIS FRESCA
-    const salaFresca = salas.find(s => s.id === salaIdSeguro);
-    if (salaFresca) {
-      console.error(`🔴 Sala recarregada do servidor:`);
-      console.error(`   turnoAtual: ${salaFresca.turnoAtual}`);
-      console.error(`   ordem: [${(salaFresca.ordem || []).join(', ')}]`);
-      console.error(`   maletas com dono: ${salaFresca.maletas.filter(m => m.dono).length}`);
-    }
-    
-    // ✅ QUARTO: Resetar estado local e renderizar
+    // ✅ QUARTO: Resetar estado local e renderizar com dados do servidor
     resetarEstadoDoJogo();
     
-    // Atualizar salaAtual com o estado do servidor
+    // Atualizar salaAtual com o estado do servidor (APÓS PUT, tem sorteioAtivo=true)
     salaAtual = resultado.sala;
+    maletas = resultado.sala.maletas;
+    turnoAtual = resultado.sala.turnoAtual;
+    ordem = resultado.sala.ordem;
+    
+    console.error(`✅ Estado local SINCRONIZADO com servidor:`);
+    console.error(`   salaAtual.sorteioAtivo: ${salaAtual.sorteioAtivo}`);
+    console.error(`   turnoAtual: ${turnoAtual}`);
+    console.error(`   ordem.length: ${ordem.length}`);
+    
     criarMaletas();
     
     console.error(`✅ Sorteio iniciado com SUCESSO!`);
@@ -1735,9 +1741,12 @@ async function iniciarSorteioNoServidor(ordem) {
     console.error("❌ Erro ao iniciar sorteio:", e);
     alert("❌ Erro ao iniciar sorteio: " + e.message);
   } finally {
-    // 🛡️ DESATIVAR PROTEÇÃO SEMPRE, mesmo se houve erro
-    inicializandoSorteio = false;
-    console.error(`🛡️ 🛡️ 🛡️ PROTEÇÃO DESATIVADA: inicializandoSorteio = false`);
+    // 🛡️ DESATIVAR PROTEÇÃO APÓS UMA PEQUENA ESPERA
+    // Espera 500ms para garantir que socket.on() já processou se chegou durante a espera ativa
+    setTimeout(() => {
+      inicializandoSorteio = false;
+      console.error(`🛡️ 🛡️ 🛡️ PROTEÇÃO DESATIVADA (após delay): inicializandoSorteio = false`);
+    }, 500);
   }
 }
 
@@ -1830,46 +1839,46 @@ function criarMaletas() {
     console.error(`   Maletas LIMPAS ✅`);
   }
 
-  // ✅ FILTRAR MALETAS: Se não há vencedor, mostrar apenas as que não foram escolhidas
-  const maletasAMostrar = maletas.filter(maleta => {
-    // Se houver vencedor (rodada terminou), mostrar todas com seus donos
-    if (houveVencedor || salaAtual.revelado) {
-      return true;
-    }
-    // Caso contrário, mostrar APENAS as que não foram escolhidas (dono === null)
-    return maleta.dono === null;
-  });
+  // ✅ MOSTRAR TODAS AS MALETAS - nunca filtrar!
+  // As que têm dono vão aparecer marcadas, as que não têm vão aparecer disponíveis
+  const maletasAMostrar = maletas;
   
   console.error(`   Renderizando ${maletasAMostrar.length}/${maletas.length} maletas`);
-  if (houveVencedor || salaAtual.revelado) {
-    console.error(`   (Modo Revelação: mostrando TODAS as maletas com seus donos)`);
-  } else {
-    console.error(`   (Modo Jogo: escondendo maletas já escolhidas)`);
-  }
+  console.error(`   Maletas com dono: ${maletas.filter(m => m.dono).map(m => `#${m.numero}(${m.dono})`).join(', ')}`);
+  console.error(`   Maletas livres: ${maletas.filter(m => !m.dono).map(m => `#${m.numero}`).join(', ')}`);
 
   // Renderizar maletas com feedback visual claro
   maletasAMostrar.forEach((maleta, i) => {
-    // Encontrar índice original para o evento de clique
+    // Encontrar índice original
     const indiceOriginal = maletas.indexOf(maleta);
     
     const div = document.createElement("div");
     div.className = "maleta";
     div.id = `maleta-${indiceOriginal}`;
     
-    // Se a maleta já foi escolhida, mostrar o dono
+    // Se a maleta já foi escolhida (tem dono), mostrar o dono de forma bem clara
     if (maleta.dono) {
       div.classList.add("escolhida");
-      div.innerHTML = `<strong>${maleta.dono}</strong><br><small>Maleta ${maleta.numero}</small>`;
+      // Mostrar bem grande quem escolheu a maleta
+      div.innerHTML = `
+        <div style="font-size: 12px; color: #666; margin-bottom: 5px;">Maleta ${maleta.numero}</div>
+        <div style="font-size: 20px; font-weight: bold; color: #2196F3;">${maleta.dono}</div>
+        <div style="font-size: 10px; color: #999;">✓ Escolhida</div>
+      `;
       div.style.cursor = "not-allowed";
-      div.style.opacity = "0.7";
-      div.style.backgroundColor = "#f0f0f0";
-      // NÃO adicionar onclick se já foi escolhida
+      div.style.opacity = "0.8";
+      div.style.backgroundColor = "#e3f2fd";
+      div.style.border = "2px solid #2196F3";
+      div.style.pointerEvents = "none"; // Desabilitar clique completamente
     } else {
       // Maleta disponível - clickável
-      div.textContent = `Maleta ${maleta.numero}`;
+      div.innerHTML = `<strong style="font-size: 24px;">🎁</strong><br><small>Maleta ${maleta.numero}</small>`;
       div.style.cursor = "pointer";
       div.style.opacity = "1";
-      // Adicionar onclick com índice original
+      div.style.backgroundColor = "#fff";
+      div.style.border = "2px solid #ddd";
+      
+      // Adicionar onclick somente para maletas livres
       div.onclick = () => escolherMaleta(indiceOriginal);
     }
 
@@ -1990,24 +1999,12 @@ async function abrirTodasAsMaletas() {
     if (resultado.sucesso) {
       console.log('✅ Maletas reveladas no servidor, vencedor:', resultado.vencedor);
       
-      // Emitir evento para sincronizar com TODOS os clientes
-      if (socket && socket.connected) {
-        socket.emit('sorteio:revelado', {
-          salaId: salaAtual.id,
-          vencedor: resultado.vencedor,
-          maletas: resultado.maletas
-        });
-        console.log('📡 Evento sorteio:revelado emitido');
-      }
+      // ❌ NÃO EMITIR socket.emit('sorteio:revelado') AQUI
+      // O Servidor já emitiu para todos via io.to(sala_${salaId}).emit('sorteio:revelado')
+      // na rota PUT /api/salas/:id/sorteio/revelar
+      // Apenas esperamos receber via socket.on('sorteio:revelado')
       
-      // Também sincronizar localmente
-      carregarSalas().then(() => {
-        const salaNova = salas.find(s => s.id === salaAtual.id);
-        if (salaNova) {
-          salaAtual = salaNova;
-          sincronizarRevelacao(salaNova.vencedor);
-        }
-      });
+      console.log('📡 Aguardando socket.on(sorteio:revelado) do servidor...');
     }
   } catch (e) {
     console.error('❌ Erro ao revelar maletas:', e);
@@ -2228,6 +2225,14 @@ async function escolherMaleta(index) {
 function sincronizarRevelacao(vencedor) {
   console.log(`🎬 Sincronizando revelação com vencedor: ${vencedor}`);
   
+  // ✅ RECARREGAR MALETAS DO SERVIDOR (estado mais recente)
+  if (salaAtual.maletas) {
+    maletas = salaAtual.maletas;
+  }
+  
+  // Atualizar salaAtual.revelado
+  salaAtual.revelado = true;
+  
   // Animar suspense com tremor
   let suspenseTimeout = setTimeout(() => {
     Array.from(maletasDiv.children).forEach(div => {
@@ -2238,20 +2243,36 @@ function sincronizarRevelacao(vencedor) {
   setTimeout(() => {
     clearTimeout(suspenseTimeout);
     
-    // Mostrar prêmios (💰) e perdas (❌)
-    maletas.forEach((m, i) => {
-      const div = maletasDiv.children[i];
+    // ✅ RE-RENDERIZAR TODAS AS MALETAS com indicação de prêmio
+    maletasDiv.innerHTML = "";
+    
+    maletas.forEach((maleta, indiceOriginal) => {
+      const div = document.createElement("div");
+      div.className = "maleta";
+      div.id = `maleta-${indiceOriginal}`;
       div.classList.remove("tremendo");
       
-      if (m.premio) {
-        if (!div.textContent.includes("💰")) {
-          div.textContent += " 💰";
-        }
-      } else {
-        if (!div.textContent.includes("❌")) {
-          div.textContent += " ❌";
-        }
-      }
+      // Mostrar dono da maleta
+      const donoBadge = maleta.dono ? `<div style="font-size: 12px; color: #2196F3; font-weight: bold;">${maleta.dono}</div>` : '';
+      
+      // Mostrar resultado (prêmio ou não)
+      const resultadoBadge = maleta.premio ? '💰 PRÊMIO!' : '❌ Sem Prêmio';
+      const resultadoCor = maleta.premio ? '#4CAF50' : '#f44336';
+      
+      div.innerHTML = `
+        ${donoBadge}
+        <div style="font-size: 16px; margin: 8px 0;">Maleta ${maleta.numero}</div>
+        <div style="font-size: 14px; color: ${resultadoCor}; font-weight: bold;">${resultadoBadge}</div>
+      `;
+      
+      // Estilo para maletas reveladas
+      div.style.cursor = "default";
+      div.style.opacity = "1";
+      div.style.backgroundColor = maleta.premio ? "#e8f5e9" : "#ffebee";
+      div.style.border = `2px solid ${resultadoCor}`;
+      div.style.pointerEvents = "none"; // Não é clicável
+      
+      maletasDiv.appendChild(div);
     });
     
     // Mostrar resultado
@@ -2279,11 +2300,78 @@ function sincronizarRevelacao(vencedor) {
         resultadoTexto.textContent = "😅 Ninguém venceu dessa vez!";
         btnProximaRodada.classList.remove("hidden");
         btnVoltar.classList.add("hidden");
-        mostrarToast(`😅 Ninguém venceu!`, 3000);
+        mostrarToast(`😅 Ninguém venceu! Próixma rodada começando...`, 3000);
+        
+        // ✅ PRÓXIMA RODADA - remover as maletas escolhidas e criar novas
+        setTimeout(() => {
+          iniciarProximaRodada();
+        }, 3000);
       }
     }, 500);
     
   }, 1200);
+}
+
+// ✅ NOVO: Iniciar próxima rodada (remover maletas escolhidas, criar novas)
+async function iniciarProximaRodada() {
+  console.error(`🔄 [PRÓXIMA RODADA] Iniciando nova rodada...`);
+  
+  if (!salaAtual || !salaAtual.id) {
+    console.error(`❌ Erro: salaAtual não existe`);
+    return;
+  }
+  
+  try {
+    // ✅ Resetar para começar nova rodada
+    const novasSemaletasLimpas = maletas.filter(m => !m.dono).map(m => ({
+      ...m,
+      numero: m.numero // Manter número original
+    }));
+    
+    console.error(`   Maletas escolhidas removidas. Restam ${novasSemaletasLimpas.length}/${maletas.length}`);
+    
+    // Se ainda houver maletas, iniciar próxima rodada
+    if (novasSemaletasLimpas.length >= 2) {
+      // Preparar dados para próxima rodada no servidor
+      const response = await fetch(`${API_URL}/api/salas/${salaAtual.id}/sorteio/proxima`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          ordem: salaAtual.ordem, // Mesma ordem
+          totalMaletas: novasSemaletasLimpas.length // Menos uma maleta
+        })
+      });
+      
+      const resultado = await response.json();
+      
+      if (resultado.sucesso) {
+        console.log(`✅ Próxima rodada iniciada no servidor`);
+        
+        // Atualizar estado local
+        salaAtual = resultado.sala;
+        maletas = salaAtual.maletas;
+        turnoAtual = salaAtual.turnoAtual || 0;
+        ordem = salaAtual.ordem;
+        
+        // Limpar UI do resultado anterior
+        resultado.classList.add("hidden");
+        resultadoTexto.textContent = "";
+        resultadoTexto.classList.remove("vitoria");
+        houveVencedor = false;
+        
+        // Renderizar novas maletas
+        criarMaletas();
+        mostrarToast(`🎉 Nova rodada! ${novasSemaletasLimpas.length} maletas disponíveis`, 3000);
+      }
+    } else {
+      // Sem mais maletas - torneio terminou
+      console.error(`   Sem maletas restantes. Encerrando torneio.`);
+      mostrarToast(`🏁 Torneio finalizado! Sem mais maletas.`, 5000);
+      finalizarTorneioEFechar(null);
+    }
+  } catch (e) {
+    console.error(`❌ Erro ao iniciar próxima rodada:`, e);
+  }
 }
 
 // ✅ NOVO: Finalizar torneio completamente
