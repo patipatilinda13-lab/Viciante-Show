@@ -1,0 +1,253 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Sorteio das Maletas</title>
+  <link rel="stylesheet" href="style.css" />
+  <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
+</head>
+<body>
+
+  <div id="app">
+    <div id="conexaoStatus" style="display:none; background: #f56565; color: #fff; text-align:center; padding: 10px; border-radius: 8px; margin-bottom: 10px; font-weight: bold;">Reconectando...</div>
+    <div id="toastNotification" style="display:none; position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); background: #48bb78; color: #fff; padding: 14px 20px; border-radius: 8px; font-weight: bold; z-index: 9999; animation: slideIn 0.3s ease-out; max-width: 300px; text-align: center;"></div>
+
+    <!-- ✅ BACKDROP PARA DRAWERS -->
+    <div id="drawerBackdrop" style="display:none; position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: rgba(0,0,0,0.5); backdrop-filter: blur(4px); z-index: 995; transition: opacity 0.3s ease;"></div>
+
+    <!-- ✅ DRAWER DE PERFIL (ESQUERDO) -->
+    <div id="drawerPerfil" class="drawer drawer-esquerdo">
+      <div class="drawer-header">
+        <h2 style="margin: 0; color: #00d4ff; font-size: 18px;">👤 Meu Perfil</h2>
+        <button onclick="fecharDrawerPerfil()" class="btn-fechar-drawer">&times;</button>
+      </div>
+      
+      <div class="drawer-content">
+        <!-- Foto do Perfil -->
+        <div style="text-align: center; margin-bottom: 20px;">
+          <img id="fotoPerfil" src="perfil/f1.png" alt="Foto" class="foto-perfil-drawer" />
+          <p style="color: #aaa; font-size: 12px; margin-top: 8px;">Clique para mudar foto</p>
+        </div>
+        
+        <!-- Nome do Jogador -->
+        <div style="text-align: center; margin-bottom: 15px;">
+          <h3 id="nomePerfil" style="color: #00d4ff; margin: 0; font-size: 16px;">Jogador</h3>
+        </div>
+        
+        <!-- Pensamento do Dia -->
+        <div style="background: rgba(0, 212, 255, 0.15); border-left: 3px solid #00d4ff; padding: 12px; border-radius: 6px; margin-bottom: 15px;">
+          <p style="color: #aaa; font-size: 11px; margin: 0 0 8px 0; text-transform: uppercase; font-weight: bold;">💭 Pensamento do Dia</p>
+          <p id="pensamentoPerfil" style="color: #fff; font-size: 13px; margin: 0; font-style: italic; min-height: 40px; cursor: pointer;">"Clique para adicionar..."</p>
+          <input id="inputPensamento" type="text" placeholder="Digite seu pensamento..." class="input-pensamento" style="display: none;" />
+          <button id="btnEditarPensamento" style="width: 100%; padding: 8px; margin-top: 8px; background: #00d4ff; color: #000; border: none; border-radius: 4px; cursor: pointer; font-weight: bold; font-size: 12px; display: none;">💾 Salvar</button>
+        </div>
+        
+        <!-- Estatísticas -->
+        <div style="background: rgba(255, 193, 7, 0.15); border-left: 3px solid #ffc107; padding: 12px; border-radius: 6px;">
+          <div style="color: #ffc107; font-size: 13px; font-weight: bold; display: flex; align-items: center; justify-content: space-between;">
+            <span>🏆 Torneios Vencidos</span>
+            <span style="font-size: 18px;" id="torneiosVencidos">0</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ✅ DRAWER DE CHAT (DIREITO) -->
+    <div id="drawerChat" class="drawer drawer-direito">
+      <div class="drawer-header">
+        <div style="display: flex; gap: 8px;">
+          <button id="btnAbaChatGlobal" class="tab-button tab-ativo">💬 Global</button>
+          <button id="btnAbaChatTorneio" class="tab-button" style="display: none;">🎮 Torneio</button>
+        </div>
+        <button onclick="fecharDrawerChat()" class="btn-fechar-drawer">&times;</button>
+      </div>
+      
+      <div id="mensagensChat" class="drawer-mensagens">
+        <p style="color: #888; text-align: center; margin-top: 20px;">Sem mensagens ainda...</p>
+      </div>
+      
+      <div class="drawer-footer">
+        <div style="display: flex; gap: 8px;">
+          <input id="inputMensagem" type="text" placeholder="Digite uma mensagem..." class="input-mensagem" />
+          <button id="btnEnviarMensagem" class="btn-enviar-mensagem">→</button>
+        </div>
+      </div>
+    </div>
+
+    <div id="tela-autenticacao" style="display:block;">
+      <div class="auth-container">
+        <h1>🎲 Sorteio das Maletas</h1>
+        
+        <div class="auth-tabs">
+          <button id="abaCadastro" class="auth-tab ativo">📝 Registrar</button>
+          <button id="abaLogin" class="auth-tab">🔑 Logar</button>
+        </div>
+
+        <div id="formularioCadastro" class="auth-form">
+          <h2>Criar Conta</h2>
+          <p style="color: #aaa; font-size: 14px;">Coloque seu nome no campo Login (mínimo 6 caracteres)</p>
+          <input type="text" id="inputCadastroLogin" placeholder="Seu Nome (mín 6 caracteres)" maxlength="50"/>
+          <input type="password" id="inputCadastroSenha" placeholder="Crie uma Senha"/>
+          <button id="btnCadastrar">Registrar</button>
+        </div>
+
+        <div id="formularioLogin" class="auth-form" style="display:none;">
+          <h2>Entrar</h2>
+          <input type="text" id="inputLoginUsername" placeholder="Login"/>
+          <input type="password" id="inputLoginSenha" placeholder="Senha"/>
+          <button id="btnLogar">Logar</button>
+        </div>
+      </div>
+    </div>
+
+    <div id="tela-salas" style="display:none;">
+      <h2>🎲 Salas Disponíveis</h2>
+      <div id="statusAdminTela" style="display:none; text-align: center; padding: 10px; background: #2d5016; border-radius: 5px; margin-bottom: 15px;">
+        <p style="margin: 0; color: #90EE90;"><strong>✅ Logado como ADMIN</strong></p>
+      </div>
+      <div id="lista-salas"></div>
+      <button id="abrirPainelBtn" class="btn-acesso-painel" style="display:none;">📋 Painel</button>
+      <button id="abrirAdminSecreto" class="btn-acesso-painel">🔐 Código de Admin</button>
+      <button id="sairAdminBtn" class="btn-secondary" style="display:none;">🚪 Sair Admin</button>
+      <button id="btnDeslogar" class="btn-deslogar">🚪 Deslogar</button>
+    </div>
+
+    <div id="tela-admin-secreto" style="display:none;">
+      <div class="login-container">
+        <h2>🔐 Código de Admin</h2>
+        <p>Digite o código de acesso:</p>
+        <input type="password" id="senhaAdminInput" placeholder="Código de acesso" />
+        <button id="entrarAdminBtn">Entrar</button>
+        <button id="voltarAdminBtn" class="btn-secondary">Voltar</button>
+      </div>
+    </div>
+
+    <div id="tela-painel-moderador-direto" style="display:none;">
+      <div class="painel-container">
+        <button id="sairPainelSecretoBtn" class="btn-voltar">← Sair do Painel</button>
+        <h2>⚙️ Painel Moderador</h2>
+        
+        <div id="containerOpcoesPainelSecreto">
+          <div class="opcao-painel">
+            <h3>➕ Criar Nova Sala</h3>
+            <div class="form-criar-sala">
+              <input type="text" id="inputNomeSalaSecreto" placeholder="Nome da sala (ex: Partida 50 reais)" maxlength="30" />
+              <input type="number" id="inputValorSalaSecreto" placeholder="Valor do ingresso (ex: 50)" min="1" />
+              <button id="btnCriarSalaSecreto">Criar Sala</button>
+            </div>
+          </div>
+
+          <div class="opcao-painel">
+            <h3>📋 Gerenciar Salas</h3>
+            <div id="listaSalasModera"></div>
+          </div>
+
+          <div class="opcao-painel">
+            <h3>👥 Gerenciar Contas</h3>
+            <button id="btnAbrirContas" class="btn-editar">👥 Ver Contas</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div id="tela-contas" style="display:none;">
+      <div class="painel-container">
+        <button id="voltarDoContas" class="btn-voltar">← Voltar</button>
+        <h2>👥 Gerenciar Contas</h2>
+        
+        <div class="opcao-painel">
+          <button id="btnZerarContas" class="btn-expulsar" style="width: 100%; margin-bottom: 15px;">⚠️ Zerar Todas as Contas</button>
+        </div>
+
+        <div id="listaContas"></div>
+      </div>
+    </div>
+
+    <!-- Diálogo: Admin quer participar como jogador? -->
+    <div id="dialogoAdminParticipa" style="display:none; position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: rgba(0,0,0,0.7); justify-content: center; align-items: center; z-index: 1000;">
+      <div style="background: #1a202c; padding: 30px; border-radius: 10px; text-align: center; box-shadow: 0 4px 6px rgba(0,0,0,0.5);">
+        <h3>Deseja participar como jogador?</h3>
+        <p style="color: #aaa; margin: 15px 0;">Se escolher "Não", você entra como moderador sem contar no limite.</p>
+        <div style="display: flex; gap: 10px; justify-content: center;">
+          <button id="btnAdminSim" style="padding: 10px 20px; background: #48bb78; color: white; border: none; border-radius: 5px; cursor: pointer;">✅ Sim, Participar</button>
+          <button id="btnAdminNao" style="padding: 10px 20px; background: #f56565; color: white; border: none; border-radius: 5px; cursor: pointer;">❌ Não, Apenas Moderar</button>
+        </div>
+      </div>
+    </div>
+
+    <div id="tela-sala-gerenciamento" style="display:none;">
+      <button id="voltarGerenciamento" class="btn-voltar">← Voltar</button>
+      <h2 id="nomeSalaGerenciamento"></h2>
+
+      <div id="moderadorNaSala" style="display:none; background: #4a5568; padding: 10px; border-radius: 5px; margin-bottom: 15px; text-align: center;">
+        <p style="margin: 0;"><strong>⚙️ Moderador na Sala</strong></p>
+      </div>
+
+      <div id="containerParticipacao" style="display:none; background: #2ecc71; padding: 15px; border-radius: 8px; margin-bottom: 15px; text-align: center;">
+        <p style="margin: 0 0 10px 0;"><strong>✅ Você está participando desse torneio!</strong></p>
+        <button id="btnSairTorneio" class="btn-sair">🚪 Sair do Torneio</button>
+      </div>
+
+      <div id="containerBotaoParticipacao" style="display:none; text-align: center; margin-bottom: 15px;">
+        <button id="btnParticipar" class="btn-participar">👉 Participar</button>
+      </div>
+
+      <div id="containerParticipantes">
+        <h3>👥 Participantes:</h3>
+        <div id="listaParticipantes"></div>
+      </div>
+
+      <div id="avisoPagamento" class="aviso-info" style="display:none;">
+        ✅ Marque quem já pagou para iniciar
+      </div>
+
+      <button id="iniciarSorteio" class="btn-iniciar" disabled>
+        🎰 Iniciar Sorteio
+      </button>
+    </div>
+
+    <div id="tela-jogo" style="display:none;">
+      <h1 class="titulo">🎒 Escolha da Maleta</h1>
+
+      <div id="ordem">
+        <p>Ordem do Sorteio:</p>
+        <ul id="listaOrdem"></ul>
+      </div>
+
+      <div id="maletas">
+        <!-- maletas geradas via JS -->
+      </div>
+
+      <div id="status">
+        Aguardando escolha...
+      </div>
+
+      <button id="abrirBtn" disabled>Abrir Maletas</button>
+
+      <div id="resultado" class="hidden">
+        <h2 id="resultadoTexto"></h2>
+        <div id="botoesResultado">
+          <button id="btnProximaRodada" class="btn-proxima-rodada" onclick="proximaRodada()">🔄 Próxima Rodada</button>
+          <button id="btnVoltar" class="btn-voltar-salas" onclick="resetar()">🏠 Voltar às Salas</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ✅ BOTÕES FLUTUANTES PARA DRAWERS (puxadores laterais - ocultos até login) -->
+    <div id="botoesInterface" style="display: none;">
+      <button id="btnAbrirPerfil" class="btn-flutuante btn-perfil" title="Meu Perfil">
+        <span style="margin-left: -5px;">👤</span>
+      </button>
+      
+      <button id="btnAbrirChat" class="btn-flutuante btn-chat" title="Chat">
+        <span style="margin-right: -5px;">💬</span>
+        <span id="badgeMensagensNaoLidas" class="badge-mensagens" style="display:none;">0</span>
+      </button>
+    </div>
+
+  </div>
+
+  <script src="script.js"></script>
+</body>
+</html>
