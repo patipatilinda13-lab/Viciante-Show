@@ -328,6 +328,9 @@ app.put('/api/salas/:id/sorteio', (req, res) => {
   sala.vencedor = null;
   sala.vencedorRegistrado = null;
   
+  // 🔥 FORCE CLEAR DE MALETAS ANTIGAS - GARANTIR LIMPEZA TOTAL
+  sala.maletas = [];
+  
   // Inicializar estado do sorteio
   const indicePremiada = Math.floor(Math.random() * totalMaletas);
   
@@ -339,6 +342,7 @@ app.put('/api/salas/:id/sorteio', (req, res) => {
   
   salvarDados(dados);
   console.log(`✅ [Sala ${sala.id}] Novo sorteio iniciado - Ordem: ${ordem.join(' → ')}`);
+  console.log(`   Maletas criadas LIMPAS com dono=null`);
   res.json({ sucesso: true, sala });
 });
 
