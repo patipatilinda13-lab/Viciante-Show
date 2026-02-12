@@ -34,7 +34,13 @@ const DADOS_PADRAO = {
       jogadores: [],
       limite: 10,
       aberta: true,
-      moderador: null
+      moderador: null,
+      sorteioAtivo: false,  // ✅ ADICIONADO
+      ordem: [],            // ✅ ADICIONADO
+      turnoAtual: 0,        // ✅ ADICIONADO
+      maletas: [],          // ✅ ADICIONADO
+      revelado: false,      // ✅ ADICIONADO
+      vencedor: null        // ✅ ADICIONADO
     },
     {
       id: 2,
@@ -43,7 +49,13 @@ const DADOS_PADRAO = {
       jogadores: [],
       limite: 10,
       aberta: true,
-      moderador: null
+      moderador: null,
+      sorteioAtivo: false,  // ✅ ADICIONADO
+      ordem: [],            // ✅ ADICIONADO
+      turnoAtual: 0,        // ✅ ADICIONADO
+      maletas: [],          // ✅ ADICIONADO
+      revelado: false,      // ✅ ADICIONADO
+      vencedor: null        // ✅ ADICIONADO
     }
   ],
   contas: {}
@@ -343,6 +355,9 @@ app.put('/api/salas/:id/sorteio', (req, res) => {
   salvarDados(dados);
   console.log(`✅ [Sala ${sala.id}] Novo sorteio iniciado - Ordem: ${ordem.join(' → ')}`);
   console.log(`   Maletas criadas LIMPAS com dono=null`);
+  console.log(`   sorteioAtivo: ${sala.sorteioAtivo}`);
+  console.log(`   turnoAtual: ${sala.turnoAtual}`);
+  console.log(`   Dados salvos em data.json`);
   res.json({ sucesso: true, sala });
 });
 
@@ -351,7 +366,19 @@ app.post('/api/salas/:id/maleta', (req, res) => {
   const dados = lerDados();
   const sala = dados.salas.find(s => s.id === parseInt(req.params.id));
   
+  console.error(`🔴 [MALETA] POST /api/salas/${req.params.id}/maleta`);
+  console.error(`   Sala encontrada? ${sala ? 'SIM' : 'NÃO'}`);
+  if (sala) {
+    console.error(`   sorteioAtivo: ${sala.sorteioAtivo}`);
+    console.error(`   turnoAtual: ${sala.turnoAtual}`);
+    console.error(`   ordem: [${(sala.ordem || []).join(', ')}]`);
+  }
+  
   if (!sala || !sala.sorteioAtivo) {
+    console.error(`❌ ERRO: Sorteio não está ativo para sala ${req.params.id}`);
+    if (sala) {
+      console.error(`   Dados da sala: sorteioAtivo=${sala.sorteioAtivo}, maletas=${sala.maletas?.length || 0}`);
+    }
     return res.status(400).json({ erro: 'Sorteio não está ativo' });
   }
   

@@ -2085,6 +2085,12 @@ async function escolherMaleta(index) {
 
   // Enviar para servidor
   try {
+    console.error(`🔴 [ESCOLHER MALETA] Cliente enviando:`);
+    console.error(`   Sala ID: ${salaAtual.id}`);
+    console.error(`   Maleta: ${index + 1}`);
+    console.error(`   Jogador: ${nomeJogadorAtual}`);
+    console.error(`   Estado local - turnoAtual: ${turnoAtual}, ordem: [${ordem.join(', ')}]`);
+    
     const response = await fetch(`${API_URL}/api/salas/${salaAtual.id}/maleta`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -2135,10 +2141,13 @@ async function escolherMaleta(index) {
       
     } else {
       console.error("❌ Erro ao abrir maleta:", resultado.erro);
+      console.error(`   Resposta do servidor:`, resultado);
+      console.error(`   Estado local no momento do erro - turnoAtual: ${turnoAtual}, ordem: [${ordem.join(', ')}]`);
       mostrarToast(`❌ ${resultado.erro}`, 3000);
     }
   } catch (e) {
-    console.error("Erro ao abrir maleta:", e);
+    console.error("❌ Erro ao abrir maleta:", e);
+    console.error(`   Stack:`, e.stack);
   }
 }
 
