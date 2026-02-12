@@ -39,10 +39,10 @@ let salas = [
 ];
 
 const SENHA_ADMIN = "@@Lucas2014@@";
-const CHAVE_SALAS_STORAGE = "vicianteshow_salas";
+// ✅ localStorage agora contém APENAS dados de sessão
+// Dados de contas/salas vêm SEMPRE do servidor
 const CHAVE_ID_DISPOSITIVO = "vicianteshow_device_id";
 const CHAVE_SESSAO_ATUAL = "vicianteshow_sessao_atual";
-const CHAVE_CONTAS = "vicianteshow_contas";
 const CHAVE_USUARIO_LOGADO = "vicianteshow_usuario_logado";
 
 // URL do servidor - API sempre no Render!
@@ -131,25 +131,26 @@ let usuarioLogadoAtual = null;
 let ultimaAtividadeTimestamp = null;
 let inicializandoSorteio = false; // 🛡️ Flag para proteger durante inicialização
 
-// 🧹 LIMPEZA DE CACHE ANTIGO - Função para resetar localStorage
+// 🧹 LIMPEZA SEGURA - Remove apenas dados desnecessários
 function limparCacheAntigo() {
-  console.error(`🔴 [LIMPEZA] Removendo dados antigos de localStorage...`);
+  console.error(`🔴 [LIMPEZA] Removendo dados obsoletos de localStorage...`);
   try {
-    localStorage.removeItem(CHAVE_SALAS_STORAGE);
-    localStorage.removeItem(CHAVE_CONTAS);
-    localStorage.removeItem('vicianteshow_salas_antigo');
-    localStorage.removeItem('vicianteshow_contas_antigo');
+    // Remover dados desnecessários (contas/salas não devem estar no cache)
+    const chavesARemover = [
+      'vicianteshow_salas_storage',
+      'vicianteshow_salas_antigo',
+      'vicianteshow_contas_antigo',
+      'vicianteshow_contas'
+    ];
     
-    // Remover qualquer chave que comece com 'vicianteshow'
-    const chaves = Object.keys(localStorage);
-    chaves.forEach(chave => {
-      if (chave.startsWith('vicianteshow') && !chave.includes('admin') && !chave.includes('usuario') && !chave.includes('sessao') && !chave.includes('id_dispositivo')) {
+    chavesARemover.forEach(chave => {
+      if (localStorage.getItem(chave)) {
         localStorage.removeItem(chave);
-        console.error(`   Removido: ${chave}`);
+        console.error(`   ✅ Removido: ${chave}`);
       }
     });
     
-    console.error(`✅ Cache antigo limpo com sucesso!`);
+    console.error(`✅ Cache obsoleto limpo! Mantém apenas: usuario_logado, sessao_atual, device_id`);
     return true;
   } catch (e) {
     console.error(`❌ Erro ao limpar cache:`, e);
@@ -583,13 +584,18 @@ function configurarListenersSocket() {
 }
 
 // ========== SISTEMA DE AUTENTICAÇÃO ==========
-function obterContas() {
-  const contas = localStorage.getItem(CHAVE_CONTAS);
-  return contas ? JSON.parse(contas) : {};
+// 🛡️ PROTEÇÃO: Mantém apenas dados de sessão no localStorage
+// Dados de contas (saldo, histórico) vêm SEMPRE do servidor via fetch
+
+function obterUsuarioLogado() {
+  const usuario = localStorage.getItem(CHAVE_USUARIO_LOGADO);
+  return usuario ? JSON.parse(usuario) : null;
 }
 
-function salvarContas(contas) {
-  localStorage.setItem(CHAVE_CONTAS, JSON.stringify(contas));
+function deslogarUsuario() {
+  localStorage.removeItem(CHAVE_USUARIO_LOGADO);
+  localStorage.removeItem(CHAVE_SESSAO_ATUAL);
+  // Manter device_id para reconhecimento em futuras sessões
 }
 
 function hashSenha(senha) {
@@ -745,33 +751,37 @@ function atualizarAtividade() {
 }
 
 function registrarResultadoTorneio(vencedor, sala) {
-  // Registra a vitória/derrota de todos os jogadores da sala no histórico de torneios
-  const contas = obterContas();
+  // ✅ MUDADO: Agora envia para o servidor em vez de salvar no localStorage
+  console.error(`🔴 [REGISTRAR RESULTADO] Enviando para servidor:`);
+  console.error(`   Vencedor: ${vencedor}`);
+  console.error(`   Sala: ${sala.nome} (ID: ${sala.id})`);
+  console.error(`   Jogadores: ${sala.jogadores.map(j => j.nome).join(', ')}`);
   
-  sala.jogadores.forEach(jogador => {
-    // Encontrar a conta associada a este jogador (por ID de dispositivo)
-    let contaAssociada = null;
-    
-    for (let login in contas) {
-      if (contas[login].id === jogador.id) {
-        contaAssociada = login;
-        break;
-      }
+  // Preparar dados dos jogadores para envio
+  const jogadoresParaEnvio = sala.jogadores.map(j => ({
+    nome: j.nome,
+    id: j.id
+  }));
+  
+  fetch(`${API_URL}/api/salas/${sala.id}/sorteio/vencedor`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      vencedor: vencedor,
+      jogadores: jogadoresParaEnvio
+    })
+  })
+  .then(res => res.json())
+  .then(resultado => {
+    if (resultado.sucesso) {
+      console.error(`✅ Resultado registrado no servidor`);
+    } else {
+      console.error(`❌ Erro ao registrar resultado:`, resultado.erro);
     }
-    
-    if (contaAssociada) {
-      const resultado = jogador.nome === vencedor ? "ganhou" : "perdeu";
-      contas[contaAssociada].torneios.push({
-        salaId: sala.id,
-        salaNome: sala.nome,
-        valor: sala.valor,
-        resultado: resultado,
-        data: new Date().toISOString()
-      });
-    }
+  })
+  .catch(e => {
+    console.error(`❌ Erro ao registrar resultado no servidor:`, e);
   });
-  
-  salvarContas(contas);
 }
 
 // ========== FIM AUTENTICAÇÃO ==========
