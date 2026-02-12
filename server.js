@@ -623,15 +623,33 @@ io.on('connection', (socket) => {
   socket.on('maleta:aberta', (dados) => {
     const { salaId, numeroMaleta, jogadorDaVez } = dados;
     
-    // GLOBAL broadcast - todos recebem para sincronizar em tempo real
-    io.emit('maleta:aberta', {
+    // ✅ Buscar a sala atualizada do banco de dados
+    const dadosSalas = lerDados();
+    const sala = dadosSalas.salas.find(s => s.id === parseInt(salaId));
+    
+    console.error(`🔴 [SOCKET maleta:aberta]`);
+    console.error(`   salaId: ${salaId}`);
+    console.error(`   numeroMaleta: ${numeroMaleta}`);
+    console.error(`   jogadorDaVez: ${jogadorDaVez}`);
+    console.error(`   Sala encontrada: ${sala ? 'SIM' : 'NÃO'}`);
+    
+    if (sala) {
+      console.error(`   turnoAtual ANTES: ${sala.turnoAtual}`);
+      console.error(`   turnoAtual DEPOIS: ${sala.turnoAtual}`);
+      console.error(`   maletas com dono: ${sala.maletas.filter(m => m.dono).map(m => `#${m.numero}(${m.dono})`).join(', ')}`);
+    }
+    
+    // ✅ CRÍTICO: Emitir para APENAS essa sala (io.to em vez de io.emit)
+    // E ENVIAR A SALA INTEIRA ATUALIZADA para sincronizar estado
+    io.to(`sala_${salaId}`).emit('maleta:aberta', {
       salaId: salaId,
       numeroMaleta,
       jogadorDaVez,
+      salaAtualizada: sala,  // ✅ ENVIAR SALA INTEIRA COM TURNO ATUALIZADO
       timestamp: Date.now()
     });
     
-    console.log(`📡 Maleta ${numeroMaleta} aberta por ${jogadorDaVez} na sala ${salaId}`);
+    console.log(`📡 Maleta ${numeroMaleta} aberta por ${jogadorDaVez} na sala ${salaId} - emitindo para a sala específica`);
   });
   
   // Resultado foi revelado
@@ -716,11 +734,46 @@ io.on('connection', (socket) => {
   
   // Countdown de abertura de maletas
   socket.on('maletas:comecareCountdown', (dados) => {
-    io.emit('maletas:comecareCountdown', {
+    io.to(`sala_${dados.salaId}`).emit('maletas:comecareCountdown', {
       salaId: dados.salaId,
       timestamp: Date.now()
     });
     console.log(`⏳ Iniciando countdown para abertura de maletas na sala ${dados.salaId}`);
+  });
+  
+  // ✅ NOVO: Torneio encerrado - limpa tudo e avisa todos
+  socket.on('torneio:encerrado', (dados) => {
+    const { salaId } = dados;
+    
+    console.error(`🔴 [SOCKET torneio:encerrado] Sala ${salaId}`);
+    
+    // Buscar sala e limpar sorteio
+    const dadosSalas = lerDados();
+    const sala = dadosSalas.salas.find(s => s.id === parseInt(salaId));
+    
+    if (sala) {
+      console.error(`   ANTES: sorteioAtivo=${sala.sorteioAtivo}, turnoAtual=${sala.turnoAtual}`);
+      
+      // Limpar estado do sorteio
+      sala.sorteioAtivo = false;
+      sala.maletas = [];
+      sala.ordem = [];
+      sala.turnoAtual = 0;
+      sala.revelado = false;
+      sala.vencedor = null;
+      
+      salvarDados(dadosSalas);
+      
+      console.error(`   DEPOIS: sorteioAtivo=${sala.sorteioAtivo}, turnoAtual=${sala.turnoAtual}`);
+      console.log(`✅ Sorteio limpo para sala ${salaId}`);
+    }
+    
+    // Avisar TODA a sala para voltar ao menu
+    io.to(`sala_${salaId}`).emit('torneio:encerrado', {
+      salaId,
+      mensagem: 'Torneio encerrado - voltando ao menu',
+      timestamp: Date.now()
+    });
   });
   
   // Desconexão

@@ -197,46 +197,61 @@ function configurarListenersSocket() {
   
   // Maleta foi aberta por outro jogador
   socket.on('maleta:aberta', (dados) => {
-    console.log(`🎁 Maleta ${dados.numeroMaleta} aberta por ${dados.jogadorDaVez}`);
+    console.error(`🔴 [SOCKET maleta:aberta] Recebido`);
+    console.error(`   Sala ID: ${dados.salaId}`);
+    console.error(`   Maleta: #${dados.numeroMaleta}`);
+    console.error(`   Jogador: ${dados.jogadorDaVez}`);
+    console.error(`   salaAtualizada recebida: ${dados.salaAtualizada ? 'SIM' : 'NÃO'}`);
     
     if (telaJogo.style.display !== "none" && salaAtual && salaAtual.id === dados.salaId) {
-      // Recarregar estado da sala para sincronizar com servidor
-      carregarSalas().then(() => {
-        const salaNova = salas.find(s => s.id === salaAtual.id);
-        if (salaNova) {
-          console.error(`🔴 [SOCKET maleta:aberta] Sincronizando estado:`);
-          console.error(`   turnoAtual ANTES: ${turnoAtual}`);
-          console.error(`   ordem ANTES: [${ordem.join(', ')}]`);
-          
-          salaAtual = salaNova;
-          maletas = salaAtual.maletas || [];
-          turnoAtual = salaAtual.turnoAtual || 0;
-          ordem = salaAtual.ordem || [];
-          
-          console.error(`   turnoAtual DEPOIS: ${turnoAtual}`);
-          console.error(`   ordem DEPOIS: [${ordem.join(', ')}]`);
-          console.log(`✅ Estado da sala sincronizado. Turno: ${turnoAtual}/${ordem.length}`);
-          
-          // Renderizar maletas com estado atualizado
-          criarMaletas();
-          console.log(`🎨 Maletas renderizadas - ${turnoAtual} jogadores já escolheram`);
-          
-          // Feedback visual para o próximo jogador
-          if (turnoAtual < ordem.length) {
-            const proximoJogador = ordem[turnoAtual];
-            if (nomeJogadorAtual === proximoJogador) {
-              mostrarToast(`🎯 É sua vez! Escolha uma maleta`, 3000);
-            } else {
-              mostrarToast(`⏳ Aguardando ${proximoJogador}...`, 2000);
-            }
-          } else {
-            mostrarToast(`✅ Todos escolheram!`, 3000);
+      // ✅ OTIMIZADO: Usar dados enviados pelo servidor em vez de fazer fetch
+      if (dados.salaAtualizada) {
+        console.error(`✅ Usando salaAtualizada do servidor`);
+        salaAtual = dados.salaAtualizada;
+        maletas = salaAtual.maletas || [];
+        turnoAtual = salaAtual.turnoAtual || 0;
+        ordem = salaAtual.ordem || [];
+      } else {
+        // Fallback: carregar se não vieram dados
+        console.error(`⚠️ Dados não vieram no socket, recarregando salas...`);
+        carregarSalas().then(() => {
+          const salaNova = salas.find(s => s.id === salaAtual.id);
+          if (salaNova) {
+            salaAtual = salaNova;
+            maletas = salaAtual.maletas || [];
+            turnoAtual = salaAtual.turnoAtual || 0;
+            ordem = salaAtual.ordem || [];
           }
+        });
+        return;
+      }
+      
+      console.error(`🔄 Estado sincronizado:`);
+      console.error(`   turnoAtual: ${turnoAtual}/${ordem.length}`);
+      console.error(`   Maletas escolhidas: ${maletas.filter(m => m.dono).length}`);
+      console.error(`   Próximo jogador: ${ordem[turnoAtual] || 'NINGUÉM (todos escolheram)'}`);
+      
+      // Renderizar maletas com estado atualizado
+      criarMaletas();
+      mostrarToast(`${dados.jogadorDaVez} escolheu a maleta #${dados.numeroMaleta}!`);
+      
+      // Verificar se todos já escolheram
+      if (turnoAtual >= ordem.length) {
+        console.error(`✅ TODOS ESCOLHERAM! Iniciando countdown para abertura...`);
+        mostrarToast(`✅ Todos escolheram! Abrindo maletas...`);
+        // O countdown será iniciado automaticamente por iniciarCountdownAberturaMaletas
+      } else {
+        // Feedback visual para o próximo jogador
+        const proximoJogador = ordem[turnoAtual];
+        if (nomeJogadorAtual === proximoJogador) {
+          mostrarToast(`🎯 É sua vez! Escolha uma maleta`, 3000);
+        } else {
+          mostrarToast(`⏳ Aguardando ${proximoJogador}...`, 2000);
         }
-      });
+      }
     }
   });
-  
+
   // Sorteio foi revelado
   socket.on('sorteio:revelado', (dados) => {
     if (telaJogo.style.display !== "none" && salaAtual && salaAtual.id === dados.salaId) {
@@ -517,6 +532,35 @@ function configurarListenersSocket() {
           console.log('✅ Próxima rodada carregada');
         }
       });
+    }
+  });
+
+  // ✅ NOVO: Torneio encerrado - voltar ao menu
+  socket.on('torneio:encerrado', (dados) => {
+    console.error(`🔴 [SOCKET torneio:encerrado] Sala ${dados.salaId}`);
+    
+    if (salaAtual && salaAtual.id === dados.salaId) {
+      mostrarToast(`🏆 Torneio encerrado! Voltando ao menu...`);
+      
+      // Limpar estado local
+      salaAtual = null;
+      maletas = [];
+      ordem = [];
+      turnoAtual = 0;
+      houveVencedor = false;
+      
+      // Voltar para tela de salas
+      setTimeout(() => {
+        telaJogo.style.display = "none";
+        telaSalaGerenciamento.style.display = "none";
+        telaSalas.style.display = "block";
+        
+        // Recarregar lista de salas
+        carregarSalas().then(() => {
+          renderizarSalas();
+          console.log(`✅ Voltado para lista de salas`);
+        });
+      }, 2000);
     }
   });
 
@@ -1783,13 +1827,33 @@ function criarMaletas() {
     console.error(`   Maletas LIMPAS ✅`);
   }
 
+  // ✅ FILTRAR MALETAS: Se não há vencedor, mostrar apenas as que não foram escolhidas
+  const maletasAMostrar = maletas.filter(maleta => {
+    // Se houver vencedor (rodada terminou), mostrar todas com seus donos
+    if (houveVencedor || salaAtual.revelado) {
+      return true;
+    }
+    // Caso contrário, mostrar APENAS as que não foram escolhidas (dono === null)
+    return maleta.dono === null;
+  });
+  
+  console.error(`   Renderizando ${maletasAMostrar.length}/${maletas.length} maletas`);
+  if (houveVencedor || salaAtual.revelado) {
+    console.error(`   (Modo Revelação: mostrando TODAS as maletas com seus donos)`);
+  } else {
+    console.error(`   (Modo Jogo: escondendo maletas já escolhidas)`);
+  }
+
   // Renderizar maletas com feedback visual claro
-  maletas.forEach((maleta, i) => {
+  maletasAMostrar.forEach((maleta, i) => {
+    // Encontrar índice original para o evento de clique
+    const indiceOriginal = maletas.indexOf(maleta);
+    
     const div = document.createElement("div");
     div.className = "maleta";
-    div.id = `maleta-${i}`;
+    div.id = `maleta-${indiceOriginal}`;
     
-    // Se a maleta já foi escolhida, desabilitar clique e mostrar dono
+    // Se a maleta já foi escolhida, mostrar o dono
     if (maleta.dono) {
       div.classList.add("escolhida");
       div.innerHTML = `<strong>${maleta.dono}</strong><br><small>Maleta ${maleta.numero}</small>`;
@@ -1798,11 +1862,12 @@ function criarMaletas() {
       div.style.backgroundColor = "#f0f0f0";
       // NÃO adicionar onclick se já foi escolhida
     } else {
+      // Maleta disponível - clickável
       div.textContent = `Maleta ${maleta.numero}`;
       div.style.cursor = "pointer";
       div.style.opacity = "1";
-      // Só adicionar onclick se NÃO foi escolhida
-      div.onclick = () => escolherMaleta(i);
+      // Adicionar onclick com índice original
+      div.onclick = () => escolherMaleta(indiceOriginal);
     }
 
     maletasDiv.appendChild(div);
@@ -2208,9 +2273,9 @@ function sincronizarRevelacao(vencedor) {
         btnVoltar.classList.remove("hidden");
         mostrarToast(`🏆 ${vencedor} venceu o sorteio!`, 5000);
         
-        // REMOVER TODOS DO TORNEIO APÓS MOSTRAR RESULTADO
+        // ✅ FINALIZAR TORNEIO APÓS MOSTRAR RESULTADO
         setTimeout(() => {
-          removerTodosDaTorneio();
+          finalizarTorneioEFechar(vencedor);
         }, 3000);
       } else {
         houveVencedor = false;
@@ -2222,6 +2287,80 @@ function sincronizarRevelacao(vencedor) {
     }, 500);
     
   }, 1200);
+}
+
+// ✅ NOVO: Finalizar torneio completamente
+async function finalizarTorneioEFechar(vencedor) {
+  console.error(`🔴 [FINALIZAR TORNEIO] Vencedor: ${vencedor}`);
+  
+  if (!salaAtual || !salaAtual.id) {
+    console.error(`❌ ERRO: salaAtual não existe`);
+    return;
+  }
+  
+  try {
+    // ✅ PASSO 1: Chamar endpoint para limpar sorteio no servidor
+    console.error(`   PASSO 1: Chamando DELETE /api/salas/${salaAtual.id}/sorteio/terminar`);
+    const response = await fetch(`${API_URL}/api/salas/${salaAtual.id}/sorteio/terminar`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' }
+    });
+    
+    if (response.ok) {
+      console.error(`   ✅ Servidor limpou o sorteio`);
+    } else {
+      console.error(`   ⚠️ Servidor retornou status ${response.status}`);
+    }
+    
+    // ✅ PASSO 2: Remover todos os jogadores da sala via DELETE
+    console.error(`   PASSO 2: Removendo jogadores da sala`);
+    if (salaAtual.jogadores && salaAtual.jogadores.length > 0) {
+      salaAtual.jogadores = [];
+      const responseJogadores = await fetch(`${API_URL}/api/salas/${salaAtual.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(salaAtual)
+      });
+      console.error(`   ✅ Jogadores removidos (status: ${responseJogadores.status})`);
+    }
+    
+    // ✅ PASSO 3: Emitir socket para todos voltarem ao menu
+    console.error(`   PASSO 3: Emitindo torneio:encerrado via socket`);
+    if (socket && socket.connected) {
+      socket.emit('torneio:encerrado', {
+        salaId: salaAtual.id,
+        vencedor: vencedor
+      });
+      console.error(`   ✅ Socket emitido`);
+    }
+    
+    // ✅ PASSO 4: Limpar estado local e voltar após 3 segundos
+    console.error(`   PASSO 4: Voltando ao menu em 3 segundos...`);
+    setTimeout(() => {
+      salaAtual = null;
+      maletas = [];
+      ordem = [];
+      turnoAtual = 0;
+      houveVencedor = false;
+      
+      telaJogo.style.display = "none";
+      telaSalaGerenciamento.style.display = "none";
+      telaSalas.style.display = "block";
+      
+      // Recarregar lista de salas
+      carregarSalas().then(() => {
+        renderizarSalas();
+        console.log(`✅ Voltado para lista de salas`);
+      });
+    }, 3000);
+    
+  } catch (e) {
+    console.error(`❌ ERRO ao finalizar torneio:`, e);
+    // Mesmo com erro, tentar voltar
+    setTimeout(() => {
+      voltar();
+    }, 2000);
+  }
 }
 
 // Remover todos os jogadores da sala quando torneio termina
